@@ -1,0 +1,11 @@
+name: Publish to NPM
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  call-workflow:
+    uses: cascateer/lib/.github/workflows/publish.yml@main
+    secrets: inherit

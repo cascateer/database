@@ -1,0 +1,28 @@
+{
+  "name": "@cascateer/database",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cascateer/database.git"
+  },
+  "scripts": {
+    "semver-patch": "npm version patch && git push origin main --tags",
+    "update": "npm cache clean --force && npx npm-check-updates -u && npm i",
+    "test": "vitest"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cascateer/lib": "^1.0.50",
+    "lodash": "^4.18.1",
+    "object-hash": "^3.0.0",
+    "rxjs": "^7.8.2",
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.17.24",
+    "@types/object-hash": "^3.0.6",
+    "vitest": "^4.1.9"
+  }
+}
