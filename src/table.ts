@@ -163,12 +163,6 @@ export class Table<
       ),
   );
 
-  private readonly writeRecords = new LazyPromise<T[]>((records) =>
-    writeFile(this.path, JSON.stringify(records, null, "\t")).then(
-      () => records,
-    ),
-  );
-
   selectId = (record: T): T[K] => record[this.key];
   selectById =
     (records: T[]) =>
