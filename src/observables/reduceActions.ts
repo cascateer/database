@@ -1,7 +1,7 @@
 import { property } from "@cascateer/lib";
 import { flatMap } from "@cascateer/lib/observables";
 import { LazyPromise } from "@cascateer/lib/promises";
-import { Function1, noop, tap } from "lodash";
+import { Function1, last, noop, tap } from "lodash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
 import { TableAction, TableActionCreator } from "../types";
 
@@ -21,10 +21,16 @@ export const reduceActions =
       startWith(seed),
       scan(
         (result, actions) =>
-          result.then(({ records }) =>
+          result.then(({ records, actions: previousActions }) =>
             actions.run(records).then(({ actions, callback }) => ({
               records: tap(transform(records, ...actions), callback ?? noop),
-              actions,
+              actions: actions.map((action, actionIndex, actions) => ({
+                ...action,
+                previousId: (actionIndex >= 1
+                  ? actions[actionIndex - 1]
+                  : last(previousActions)
+                )?.id,
+              })),
             })),
           ),
         Promise.resolve({
@@ -34,11 +40,4 @@ export const reduceActions =
       ),
       mergeAll(),
       flatMap(property("actions")),
-      scan(
-        ({ previousAction }, action) => ({
-          previousAction: { ...action, previousId: previousAction?.id },
-        }),
-        <{ previousAction?: TableAction<R, K> }>{},
-      ),
-      flatMap(({ previousAction }) => previousAction ?? []),
     );

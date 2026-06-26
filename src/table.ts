@@ -3,7 +3,15 @@ import { LazyPromise } from "@cascateer/lib/promises";
 import assert from "assert";
 import { existsSync } from "fs";
 import { readdir, readFile, writeFile } from "fs/promises";
-import { difference, intersectionBy, thru, uniq, without } from "lodash";
+import {
+  difference,
+  fromPairs,
+  intersectionBy,
+  thru,
+  uniq,
+  without,
+} from "lodash";
+import objectHash from "object-hash";
 import { Ora } from "ora";
 import { resolve } from "path";
 import { mergeMap, Subject } from "rxjs";
@@ -49,35 +57,29 @@ export class Table<R, K extends keyof R> {
   private readonly readActions = new LazyPromise<
     R[],
     TableActionCreatorResult<R, K>
-  >(
-    () =>
-      new Promise((callback) =>
-        readdir(this.path).then(async (files) => {
-          const actions = new Array<TableAction<R, K>>();
+  >(() =>
+    readdir(this.path).then(async (files) => {
+      const actions = new Array<TableAction<R, K>>();
 
-          for (const file of files) {
-            actions.push(
-              await readFile(resolve(this.path, file), "utf-8").then<
-                TableAction<R, K>
-              >(JSON.parse),
-            );
-          }
+      for (const file of files) {
+        actions.push(
+          await readFile(resolve(this.path, file), "utf-8").then<
+            TableAction<R, K>
+          >(JSON.parse),
+        );
+      }
 
-          return {
-            actions: actions.reduce(
-              (chainedActions, action, _, actions) =>
-                chainedActions.concat(
-                  actions.find(({ previousId }) => previousId === action.id) ??
-                    [],
-                ),
-              [
-                actions.find((action) => action.previousId == null) ?? [],
-              ].flat(),
-            ),
-            callback,
-          };
-        }),
-      ),
+      const actionsMap = fromPairs(
+        actions.map((action) => [action.previousId ?? "", [action]]),
+      );
+
+      return {
+        actions: actions.reduce(
+          (actions, action) => actions.concat(actionsMap[action.id] ?? []),
+          actionsMap[""] ?? [],
+        ),
+      };
+    }),
   );
 
   applyActions(records: R[], ...actions: TableAction<R, K>[]) {
@@ -122,7 +124,10 @@ export class Table<R, K extends keyof R> {
                 args,
                 ([, id, predicate]) => (
                   predicate(this.selectById(records)(id)),
-                  { actions: [], callback }
+                  {
+                    actions: [],
+                    callback,
+                  }
                 ),
               ),
             ),
@@ -136,7 +141,10 @@ export class Table<R, K extends keyof R> {
                 args,
                 ([, predicate]) => (
                   predicate(records),
-                  { actions: [], callback }
+                  {
+                    actions: [],
+                    callback,
+                  }
                 ),
               ),
             ),
@@ -160,15 +168,18 @@ export class Table<R, K extends keyof R> {
               }
 
               return {
-                actions: [
-                  {
-                    id: v4(),
-                    type: "insert",
-                    payload: {
-                      records: newRecords,
-                    },
-                  },
-                ],
+                actions:
+                  newRecords.length > 0
+                    ? [
+                        {
+                          id: v4(),
+                          type: "insert",
+                          payload: {
+                            records: newRecords,
+                          },
+                        },
+                      ]
+                    : [],
                 callback,
               };
             }),
@@ -178,27 +189,46 @@ export class Table<R, K extends keyof R> {
         case "update":
           this.actions.next(
             new LazyPromise((records) =>
-              thru(args, async ([, id, predicate]) => ({
-                actions: [
-                  {
-                    id: v4(),
-                    type: "update",
-                    payload: {
-                      record: await predicate(this.selectById(records)(id)),
-                    },
-                  },
-                ],
-                callback,
-              })),
+              thru(args, async ([, id, predicate]) => {
+                const targetRecord = this.selectById(records)(id);
+                const updatedTargetRecord = await predicate(targetRecord);
+
+                return {
+                  actions:
+                    objectHash(targetRecord ?? null) !==
+                    objectHash(updatedTargetRecord ?? null)
+                      ? [
+                          {
+                            id: v4(),
+                            type: "update",
+                            payload: {
+                              record: updatedTargetRecord,
+                            },
+                          },
+                        ]
+                      : [],
+                  callback,
+                };
+              }),
             ),
           );
 
           break;
         case "delete":
           this.actions.next(
-            new LazyPromise(() =>
+            new LazyPromise((records) =>
               thru(args, ([, id]) => ({
-                actions: [{ id: v4(), type: "delete", payload: { id } }],
+                actions: records.some((record) => this.selectId(record) === id)
+                  ? [
+                      {
+                        id: v4(),
+                        type: "delete",
+                        payload: {
+                          id,
+                        },
+                      },
+                    ]
+                  : [],
                 callback,
               })),
             ),
