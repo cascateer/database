@@ -3,43 +3,33 @@ import { flatMap } from "@cascateer/lib/observables";
 import { LazyPromise } from "@cascateer/lib/promises";
 import { Function1, noop, tap } from "lodash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
-import { TableAction } from "../table";
-
-export interface TableActionCreatorResult<T, K extends keyof T> {
-  actions: TableAction<T, K>[];
-  callback?: Function1<T[], void>;
-}
-
-export interface TableActionCreator<T, K extends keyof T> extends LazyPromise<
-  T[],
-  TableActionCreatorResult<T, K>
-> {}
+import { TableAction, TableActionCreator } from "../types";
 
 export const reduceActions =
-  <T, K extends keyof T>(
-    transform: (state: T[], ...actions: TableAction<T, K>[]) => T[],
+  <R, K extends keyof R>(
+    transform: (records: R[], ...actions: TableAction<R, K>[]) => R[],
     seed: LazyPromise<
-      T[],
+      R[],
       {
-        actions: TableAction<T, K>[];
-        callback?: Function1<T[], void>;
+        actions: TableAction<R, K>[];
+        callback?: Function1<R[], void>;
       }
     >,
-  ): OperatorFunction<TableActionCreator<T, K>, TableAction<T, K>> =>
+  ): OperatorFunction<TableActionCreator<R, K>, TableAction<R, K>> =>
   (source) =>
     source.pipe(
       startWith(seed),
       scan(
         (result, actions) =>
-          result.then(({ state }) =>
-            actions.run(state).then(({ actions, callback }) => ({
-              state: tap(transform(state, ...actions), callback ?? noop),
+          result.then(({ records }) =>
+            actions.run(records).then(({ actions, callback }) => ({
+              records: tap(transform(records, ...actions), callback ?? noop),
               actions,
             })),
           ),
         Promise.resolve({
-          state: new Array<T>(),
-          actions: new Array<TableAction<T, K>>(),
+          records: new Array<R>(),
+          actions: new Array<TableAction<R, K>>(),
         }),
       ),
       mergeAll(),
@@ -48,7 +38,7 @@ export const reduceActions =
         ({ previousAction }, action) => ({
           previousAction: { ...action, previousId: previousAction?.id },
         }),
-        <{ previousAction?: TableAction<T, K> }>{},
+        <{ previousAction?: TableAction<R, K> }>{},
       ),
       flatMap(({ previousAction }) => previousAction ?? []),
     );

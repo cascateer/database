@@ -1,90 +1,25 @@
-import { findDupeBy, MaybePromise, nonNullable } from "@cascateer/lib";
+import { findDupeBy, nonNullable } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promises";
 import assert from "assert";
+import { existsSync } from "fs";
 import { readdir, readFile, writeFile } from "fs/promises";
-import {
-  difference,
-  Function1,
-  intersectionBy,
-  thru,
-  uniq,
-  without,
-} from "lodash";
+import { difference, intersectionBy, thru, uniq, without } from "lodash";
 import { Ora } from "ora";
 import { resolve } from "path";
-import { mergeMap, Subject } from "rxjs";
+import { mergeMap } from "rxjs";
 import { v4 } from "uuid";
-import {
-  reduceActions,
-  TableActionCreator,
-  TableActionCreatorResult,
-} from "./observables/reduceActions";
-import { Tables } from "./types";
+import { reduceActions } from "./observables/reduceActions";
+import { TableAction, TableActionCreatorResult, Tables } from "./types";
 
-interface BaseTableAction<Type> {
-  id: string;
-  previousId?: string;
-  type: Type;
-  payload: unknown;
-  args?: [Type, ...unknown[]];
-}
+type R<t extends keyof Tables> = Tables[t]["record"];
+type K<t extends keyof Tables> = Tables[t]["key"];
 
-interface TableActions<T, K extends keyof T> {
-  one: {
-    payload: never;
-    dispatch: [id: T[K], predicate: Function1<T, void>];
-  };
-  all: {
-    payload: never;
-    dispatch: [predicate: Function1<T[], void>];
-  };
-  insert: {
-    payload: {
-      records: T[];
-    };
-    dispatch: [predicate: Function1<T[K][], MaybePromise<T[]>>];
-  };
-  update: {
-    payload: {
-      record: T;
-    };
-    dispatch: [id: T[K], predicate: Function1<T, MaybePromise<T>>];
-  };
-  delete: {
-    payload: {
-      id: T[K];
-    };
-    dispatch: [id: T[K]];
-  };
-}
-
-export type TableAction<
-  T,
-  K extends keyof T = keyof T,
-  Type extends keyof TableActions<T, K> = keyof TableActions<T, K>,
-> = BaseTableAction<Type> &
-  {
-    [Type in keyof TableActions<T, K>]: {
-      type: Type;
-      payload: TableActions<T, K>[Type]["payload"];
-      args?: [Type, ...TableActions<T, K>[Type]["dispatch"]];
-    };
-  }[Type];
-
-export class Table<
-  Id extends keyof Tables,
-  T extends Tables[Id]["type"] = Tables[Id]["type"],
-  K extends Tables[Id]["key"] & keyof T = Tables[Id]["key"] & keyof T,
-> {
+export class Table<t extends keyof Tables> {
   private static readonly BASE_URL = resolve(__dirname, "../tables");
 
-  private static readonly locks: Partial<
-    Record<keyof Tables, Subject<TableActionCreator<any, any>>>
-  > = {};
+  private static readonly tables: Tables;
 
-  private readonly locks: Subject<TableActionCreator<T, K>>;
-
-  applyActions(records: T[], ...actions: TableAction<T, K>[]) {
+  applyActions(records: R<t>[], ...actions: TableAction<R<t>, K<t>>[]) {
     return actions.reduce((records, action) => {
       switch (action.type) {
         case "insert":
@@ -106,21 +41,29 @@ export class Table<
     }, records);
   }
 
-  constructor(
-    public id: Id,
-    public key: K,
-    public createSome: (ids: T[K][], spinner?: Ora) => MaybePromise<T[]>,
-  ) {
-    this.locks = Table.locks[this.id] ??= new Subject<
-      TableActionCreator<T, K>
-    >();
+  get key(): K<t> {
+    return Table.tables[this.id].key;
+  }
 
-    this.locks
+  get records() {
+    return Table.tables[this.id].records;
+  }
+
+  get actions() {
+    return nonNullable(Table.tables[this.id].actions);
+  }
+
+  constructor(public id: t) {
+    this.actions
       .pipe(
         reduceActions(this.applyActions, this.readActions),
-        mergeMap((action) =>
-          writeFile(resolve(this.path, `${v4()}.json`), JSON.stringify(action)),
-        ),
+        mergeMap(async (action) => {
+          const path = resolve(this.path, `${action.id}.json`);
+
+          if (!existsSync(path)) {
+            return writeFile(path, JSON.stringify(action));
+          }
+        }),
       )
       .subscribe();
   }
@@ -130,18 +73,18 @@ export class Table<
   }
 
   private readonly readActions = new LazyPromise<
-    T[],
-    TableActionCreatorResult<T, K>
+    R<t>[],
+    TableActionCreatorResult<R<t>, K<t>>
   >(
     () =>
       new Promise((callback) =>
         readdir(this.path).then(async (files) => {
-          const actions = new Array<TableAction<T, K>>();
+          const actions = new Array<TableAction<R<t>, K<t>>>();
 
           for (const file of files) {
             actions.push(
               await readFile(resolve(this.path, file), "utf-8").then<
-                TableAction<T, K>
+                TableAction<R<t>, K<t>>
               >(JSON.parse),
             );
           }
@@ -163,21 +106,21 @@ export class Table<
       ),
   );
 
-  selectId = (record: T): T[K] => record[this.key];
+  selectId = (record: R<t>): R<t>[K<t>] => record[this.key];
   selectById =
-    (records: T[]) =>
-    (id: T[K]): T => (
+    (records: R<t>[]) =>
+    (id: R<t>[K<t>]): R<t> => (
       assert(findDupeBy(records, this.selectId) == null),
       nonNullable(records.find((record) => this.selectId(record) === id))
     );
 
   public async dispatch(
-    ...args: NonNullable<TableAction<T, K>["args"]>
-  ): Promise<T[]> {
-    return new Promise<T[]>((callback) => {
+    ...args: NonNullable<TableAction<R<t>, K<t>>["args"]>
+  ): Promise<R<t>[]> {
+    return new Promise<R<t>[]>((callback) => {
       switch (args[0]) {
         case "one":
-          this.locks.next(
+          this.actions.next(
             new LazyPromise((records) =>
               thru(
                 args,
@@ -191,7 +134,7 @@ export class Table<
 
           break;
         case "all":
-          this.locks.next(
+          this.actions.next(
             new LazyPromise((records) =>
               thru(
                 args,
@@ -205,7 +148,7 @@ export class Table<
 
           break;
         case "insert":
-          this.locks.next(
+          this.actions.next(
             new LazyPromise(async (records) => {
               const [, predicate] = args;
 
@@ -237,7 +180,7 @@ export class Table<
 
           break;
         case "update":
-          this.locks.next(
+          this.actions.next(
             new LazyPromise((records) =>
               thru(args, async ([, id, predicate]) => ({
                 actions: [
@@ -256,7 +199,7 @@ export class Table<
 
           break;
         case "delete":
-          this.locks.next(
+          this.actions.next(
             new LazyPromise(() =>
               thru(args, ([, id]) => ({
                 actions: [{ id: v4(), type: "delete", payload: { id } }],
@@ -268,25 +211,21 @@ export class Table<
     });
   }
 
-  public async accessSome<A extends T[K][]>(
+  public async accessSome<A extends R<t>[K<t>][]>(
     [...ids]: [...A],
     spinner?: Ora,
-  ): Promise<[...{ [K in keyof A]: T }]> {
+  ): Promise<[...{ [K in keyof A]: R<t> }]> {
     if (ids.length !== uniq(ids).length) {
       console.warn(`IDs ${ids.join(", ")} are not unique.`);
     }
 
     // @ts-expect-error
-    return this.dispatch(
-      "insert",
-      (currentIds: T[K][]) =>
-        // @ts-expect-error
-        this.createSome(difference(uniq(ids), currentIds), spinner),
-      // @ts-expect-error
+    return this.dispatch("insert", (currentIds: R<t>[K<t>][]) =>
+      this.records(difference(uniq(ids), currentIds), spinner),
     ).then((records) => ids.map(this.selectById(records)));
   }
 
-  public async accessAll(): Promise<T[]> {
-    return new Promise<T[]>((resolve) => this.dispatch("all", resolve));
+  public async accessAll(): Promise<R<t>[]> {
+    return new Promise<R<t>[]>((resolve) => this.dispatch("all", resolve));
   }
 }
