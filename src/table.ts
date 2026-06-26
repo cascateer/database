@@ -6,54 +6,26 @@ import { readdir, readFile, writeFile } from "fs/promises";
 import { difference, intersectionBy, thru, uniq, without } from "lodash";
 import { Ora } from "ora";
 import { resolve } from "path";
-import { mergeMap } from "rxjs";
+import { mergeMap, Subject } from "rxjs";
 import { v4 } from "uuid";
 import { reduceActions } from "./observables/reduceActions";
-import { TableAction, TableActionCreatorResult, Tables } from "./types";
+import {
+  TableAction,
+  TableActionCreator,
+  TableActionCreatorResult,
+  TableRecordCreator,
+} from "./types";
 
-type R<t extends keyof Tables> = Tables[t]["record"];
-type K<t extends keyof Tables> = Tables[t]["key"];
-
-export class Table<t extends keyof Tables> {
+export class Table<R, K extends keyof R> {
   private static readonly BASE_URL = resolve(__dirname, "../tables");
 
-  private static readonly tables: Tables;
+  private readonly actions = new Subject<TableActionCreator<R, K>>();
 
-  applyActions(records: R<t>[], ...actions: TableAction<R<t>, K<t>>[]) {
-    return actions.reduce((records, action) => {
-      switch (action.type) {
-        case "insert":
-          return records.concat(action.payload.records);
-        case "update": {
-          const targetRecord = action.payload.record;
-
-          return records.map((record) =>
-            this.selectId(record) === this.selectId(targetRecord)
-              ? targetRecord
-              : record,
-          );
-        }
-        case "delete":
-          return without(records, this.selectById(records)(action.payload.id));
-      }
-
-      return records;
-    }, records);
-  }
-
-  get key(): K<t> {
-    return Table.tables[this.id].key;
-  }
-
-  get records() {
-    return Table.tables[this.id].records;
-  }
-
-  get actions() {
-    return nonNullable(Table.tables[this.id].actions);
-  }
-
-  constructor(public id: t) {
+  constructor(
+    public id: string,
+    public key: K,
+    public records: TableRecordCreator<R, K>,
+  ) {
     this.actions
       .pipe(
         reduceActions(this.applyActions, this.readActions),
@@ -61,8 +33,10 @@ export class Table<t extends keyof Tables> {
           const path = resolve(this.path, `${action.id}.json`);
 
           if (!existsSync(path)) {
-            return writeFile(path, JSON.stringify(action));
+            await writeFile(path, JSON.stringify(action));
           }
+
+          return action;
         }),
       )
       .subscribe();
@@ -73,18 +47,18 @@ export class Table<t extends keyof Tables> {
   }
 
   private readonly readActions = new LazyPromise<
-    R<t>[],
-    TableActionCreatorResult<R<t>, K<t>>
+    R[],
+    TableActionCreatorResult<R, K>
   >(
     () =>
       new Promise((callback) =>
         readdir(this.path).then(async (files) => {
-          const actions = new Array<TableAction<R<t>, K<t>>>();
+          const actions = new Array<TableAction<R, K>>();
 
           for (const file of files) {
             actions.push(
               await readFile(resolve(this.path, file), "utf-8").then<
-                TableAction<R<t>, K<t>>
+                TableAction<R, K>
               >(JSON.parse),
             );
           }
@@ -106,18 +80,40 @@ export class Table<t extends keyof Tables> {
       ),
   );
 
-  selectId = (record: R<t>): R<t>[K<t>] => record[this.key];
+  applyActions(records: R[], ...actions: TableAction<R, K>[]) {
+    return actions.reduce((records, action) => {
+      switch (action.type) {
+        case "insert":
+          return records.concat(action.payload.records);
+        case "update": {
+          const targetRecord = action.payload.record;
+
+          return records.map((record) =>
+            this.selectId(record) === this.selectId(targetRecord)
+              ? targetRecord
+              : record,
+          );
+        }
+        case "delete":
+          return without(records, this.selectById(records)(action.payload.id));
+      }
+
+      return records;
+    }, records);
+  }
+
+  selectId = (record: R): R[K] => record[this.key];
   selectById =
-    (records: R<t>[]) =>
-    (id: R<t>[K<t>]): R<t> => (
+    (records: R[]) =>
+    (id: R[K]): R => (
       assert(findDupeBy(records, this.selectId) == null),
       nonNullable(records.find((record) => this.selectId(record) === id))
     );
 
   public async dispatch(
-    ...args: NonNullable<TableAction<R<t>, K<t>>["args"]>
-  ): Promise<R<t>[]> {
-    return new Promise<R<t>[]>((callback) => {
+    ...args: NonNullable<TableAction<R, K>["args"]>
+  ): Promise<R[]> {
+    return new Promise<R[]>((callback) => {
       switch (args[0]) {
         case "one":
           this.actions.next(
@@ -211,21 +207,26 @@ export class Table<t extends keyof Tables> {
     });
   }
 
-  public async accessSome<A extends R<t>[K<t>][]>(
+  public async accessSome<A extends R[K][]>(
     [...ids]: [...A],
     spinner?: Ora,
-  ): Promise<[...{ [K in keyof A]: R<t> }]> {
+  ): Promise<[...{ [K in keyof A]: R }]> {
     if (ids.length !== uniq(ids).length) {
       console.warn(`IDs ${ids.join(", ")} are not unique.`);
     }
 
     // @ts-expect-error
-    return this.dispatch("insert", (currentIds: R<t>[K<t>][]) =>
-      this.records(difference(uniq(ids), currentIds), spinner),
+    return this.dispatch(
+      "insert",
+      (currentIds: R[K][]) =>
+        // @ts-expect-error
+
+        this.records(difference(uniq(ids), currentIds), spinner),
+      // @ts-expect-error
     ).then((records) => ids.map(this.selectById(records)));
   }
 
-  public async accessAll(): Promise<R<t>[]> {
-    return new Promise<R<t>[]>((resolve) => this.dispatch("all", resolve));
+  public async accessAll(): Promise<R[]> {
+    return new Promise<R[]>((resolve) => this.dispatch("all", resolve));
   }
 }
