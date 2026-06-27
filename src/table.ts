@@ -47,28 +47,27 @@ class Table<R, K extends keyof R> {
       await mkdir(this.path, { recursive: true });
     }
 
-    return readdir(this.path).then(async (files) => {
-      const actions = new Array<TableAction<R, K>>();
+    const files = await readdir(this.path);
+    const actions = new Array<TableAction<R, K>>();
 
-      for (const file of files) {
-        actions.push(
-          await readFile(resolve(this.path, file), "utf-8").then<
-            TableAction<R, K>
-          >(JSON.parse),
-        );
-      }
-
-      const actionsMap = fromPairs(
-        actions.map((action) => [action.previousId ?? "", [action]]),
+    for (const file of files) {
+      actions.push(
+        await readFile(resolve(this.path, file), "utf-8").then<
+          TableAction<R, K>
+        >(JSON.parse),
       );
+    }
 
-      return {
-        actions: actions.reduce(
-          (actions, action) => actions.concat(actionsMap[action.id] ?? []),
-          actionsMap[""] ?? [],
-        ),
-      };
-    });
+    const actionsMap = fromPairs(
+      actions.map((action) => [action.previousId ?? "", [action]]),
+    );
+
+    return {
+      actions: actions.reduce(
+        (actions, action) => actions.concat(actionsMap[action.id] ?? []),
+        actionsMap[""] ?? [],
+      ),
+    };
   });
 
   applyActions = (records: R[], ...actions: TableAction<R, K>[]) =>
