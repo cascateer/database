@@ -2,7 +2,7 @@ import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promises";
 import assert from "assert";
 import { existsSync } from "fs";
-import { readdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import {
   difference,
   fromPairs,
@@ -25,7 +25,7 @@ import {
   TableRecordCreator,
 } from "./types";
 
-export class Table<R, K extends keyof R> {
+class Table<R, K extends keyof R> {
   private static readonly BASE_URL = resolve(__dirname, "../tables");
 
   constructor(
@@ -42,8 +42,12 @@ export class Table<R, K extends keyof R> {
   protected readonly readActions = new LazyPromise<
     R[],
     TableActionCreatorResult<R, K>
-  >(() =>
-    readdir(this.path).then(async (files) => {
+  >(async () => {
+    if (!existsSync(this.path)) {
+      await mkdir(this.path, { recursive: true });
+    }
+
+    return readdir(this.path).then(async (files) => {
       const actions = new Array<TableAction<R, K>>();
 
       for (const file of files) {
@@ -64,8 +68,8 @@ export class Table<R, K extends keyof R> {
           actionsMap[""] ?? [],
         ),
       };
-    }),
-  );
+    });
+  });
 
   applyActions = (records: R[], ...actions: TableAction<R, K>[]) =>
     actions.reduce((records, action) => {
@@ -244,6 +248,8 @@ export class Table<R, K extends keyof R> {
     return new Promise<R[]>((resolve) => this.dispatch("all", resolve));
   }
 }
+
+export { type Table };
 
 export const createTable = memoize(
   <R, K extends keyof R>(
