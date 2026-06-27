@@ -17,6 +17,7 @@ import { Ora } from "ora";
 import { resolve } from "path";
 import { mergeMap, NextObserver, Subject, Subscription } from "rxjs";
 import { v4 } from "uuid";
+import { defaults } from "./defaults";
 import { reduceActions } from "./observables/reduceActions";
 import {
   TableAction,
@@ -26,7 +27,7 @@ import {
 } from "./types";
 
 class Table<R, K extends keyof R> {
-  private static readonly BASE_URL = resolve(__dirname, "../tables");
+  private static readonly BASE_URL = defaults.TABLE_BASE_URL;
 
   constructor(
     public id: string,

@@ -2,6 +2,7 @@ import { MaybePromise } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promises";
 import { Function1 } from "lodash";
 import { Ora } from "ora";
+import { Table } from "./table";
 
 interface BaseTableAction<Type> {
   id: string;
@@ -66,3 +67,11 @@ export interface TableActionCreatorResult<R, K extends keyof R> {
 export interface TableRecordCreator<R, K extends keyof R> {
   (ids: R[K][], spinner?: Ora): MaybePromise<R[]>;
 }
+
+export interface FileTableRecord {
+  originalUrl: string;
+  name: string;
+  checksum: string;
+}
+
+export interface FileTable extends Table<FileTableRecord, "originalUrl"> {}

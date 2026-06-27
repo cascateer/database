@@ -17,11 +17,13 @@
     "@cascateer/lib": "^1.0.50",
     "lodash": "^4.18.1",
     "object-hash": "^3.0.0",
+    "ora": "^9.4.1",
     "rxjs": "^7.8.2",
     "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.24",
+    "@types/node": "^26.0.1",
     "@types/object-hash": "^3.0.6",
     "vitest": "^4.1.9"
   }
