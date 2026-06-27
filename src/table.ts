@@ -1,4 +1,4 @@
-import { findDupeBy, nonNullable } from "@cascateer/lib";
+import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promises";
 import assert from "assert";
 import { existsSync } from "fs";
@@ -7,6 +7,7 @@ import {
   difference,
   fromPairs,
   intersectionBy,
+  memoize,
   thru,
   uniq,
   without,
@@ -82,8 +83,8 @@ export class Table<R, K extends keyof R> {
     }),
   );
 
-  applyActions(records: R[], ...actions: TableAction<R, K>[]) {
-    return actions.reduce((records, action) => {
+  applyActions = (records: R[], ...actions: TableAction<R, K>[]) =>
+    actions.reduce((records, action) => {
       switch (action.type) {
         case "insert":
           return records.concat(action.payload.records);
@@ -102,7 +103,6 @@ export class Table<R, K extends keyof R> {
 
       return records;
     }, records);
-  }
 
   selectId = (record: R): R[K] => record[this.key];
   selectById =
@@ -260,3 +260,18 @@ export class Table<R, K extends keyof R> {
     return new Promise<R[]>((resolve) => this.dispatch("all", resolve));
   }
 }
+
+export const createTable = memoize(
+  <R, K extends keyof R>(
+    id: string,
+    key: K,
+    records: TableRecordCreator<R, K>,
+  ): { new (): Table<R, K> } =>
+    (() =>
+      class extends Table<R, K> {
+        constructor() {
+          super(id, key, records);
+        }
+      })(),
+  nthArg(0),
+);
