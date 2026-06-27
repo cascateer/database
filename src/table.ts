@@ -15,7 +15,7 @@ import {
 import objectHash from "object-hash";
 import { Ora } from "ora";
 import { resolve } from "path";
-import { mergeMap, Subject } from "rxjs";
+import { mergeMap, NextObserver, Subject, Subscription } from "rxjs";
 import { v4 } from "uuid";
 import { reduceActions } from "./observables/reduceActions";
 import {
@@ -28,34 +28,18 @@ import {
 export class Table<R, K extends keyof R> {
   private static readonly BASE_URL = resolve(__dirname, "../tables");
 
-  private readonly actions = new Subject<TableActionCreator<R, K>>();
-
   constructor(
     public id: string,
     public key: K,
     public records: TableRecordCreator<R, K>,
-  ) {
-    this.actions
-      .pipe(
-        reduceActions(this.applyActions, this.readActions),
-        mergeMap(async (action) => {
-          const path = resolve(this.path, `${action.id}.json`);
-
-          if (!existsSync(path)) {
-            await writeFile(path, JSON.stringify(action));
-          }
-
-          return action;
-        }),
-      )
-      .subscribe();
-  }
+    private observer: NextObserver<TableActionCreator<R, K>>,
+  ) {}
 
   get path() {
     return resolve(Table.BASE_URL, this.id);
   }
 
-  private readonly readActions = new LazyPromise<
+  protected readonly readActions = new LazyPromise<
     R[],
     TableActionCreatorResult<R, K>
   >(() =>
@@ -118,7 +102,7 @@ export class Table<R, K extends keyof R> {
     return new Promise<R[]>((callback) => {
       switch (args[0]) {
         case "one":
-          this.actions.next(
+          this.observer.next(
             new LazyPromise((records) =>
               thru(
                 args,
@@ -135,7 +119,7 @@ export class Table<R, K extends keyof R> {
 
           break;
         case "all":
-          this.actions.next(
+          this.observer.next(
             new LazyPromise((records) =>
               thru(
                 args,
@@ -152,7 +136,7 @@ export class Table<R, K extends keyof R> {
 
           break;
         case "insert":
-          this.actions.next(
+          this.observer.next(
             new LazyPromise(async (records) => {
               const [, predicate] = args;
 
@@ -187,7 +171,7 @@ export class Table<R, K extends keyof R> {
 
           break;
         case "update":
-          this.actions.next(
+          this.observer.next(
             new LazyPromise((records) =>
               thru(args, async ([, id, predicate]) => {
                 const targetRecord = this.selectById(records)(id);
@@ -215,7 +199,7 @@ export class Table<R, K extends keyof R> {
 
           break;
         case "delete":
-          this.actions.next(
+          this.observer.next(
             new LazyPromise((records) =>
               thru(args, ([, id]) => ({
                 actions: records.some((record) => this.selectId(record) === id)
@@ -266,12 +250,29 @@ export const createTable = memoize(
     id: string,
     key: K,
     records: TableRecordCreator<R, K>,
-  ): { new (): Table<R, K> } =>
-    (() =>
-      class extends Table<R, K> {
-        constructor() {
-          super(id, key, records);
-        }
-      })(),
+  ) =>
+    class TableInstance extends Table<R, K> {
+      private static readonly actions = new Subject<TableActionCreator<R, K>>();
+      private static actionsSubscription?: Subscription;
+
+      constructor() {
+        super(id, key, records, TableInstance.actions);
+
+        TableInstance.actionsSubscription ??= TableInstance.actions
+          .pipe(
+            reduceActions(this.applyActions, this.readActions),
+            mergeMap(async (action) => {
+              const path = resolve(this.path, `${action.id}.json`);
+
+              if (!existsSync(path)) {
+                await writeFile(path, JSON.stringify(action));
+              }
+
+              return action;
+            }),
+          )
+          .subscribe();
+      }
+    },
   nthArg(0),
 );

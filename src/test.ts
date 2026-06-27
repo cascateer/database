@@ -12,3 +12,4 @@ export const TestTable = createTable<TestTableRecord, "id">(
 );
 
 new TestTable().accessSome(["foo"]).then(console.log);
+new TestTable().accessSome(["foo"]).then(console.log);
