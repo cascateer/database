@@ -285,8 +285,14 @@ export const createTable = memoize(
   nthArg(0),
 );
 
-export class FileTable extends Table<FileTableRecord, "originalUrl"> {
-  fromUrl = (url: string, spinner?: Ora) =>
+export const createFileTable = (
+  id: string,
+  key: "url",
+  records: TableRecordCreator<FileTableRecord, "url">,
+) => createTable<FileTableRecord, "url">(id, key, records);
+
+export class FileTable extends Table<FileTableRecord, "url"> {
+  toFile = (url: string, spinner?: Ora) =>
     this.accessSome([url], spinner).then(([{ name, checksum }]) =>
       new File(name).verified(checksum),
     );

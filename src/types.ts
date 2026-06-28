@@ -68,7 +68,7 @@ export interface TableRecordCreator<R, K extends keyof R> {
 }
 
 export interface FileTableRecord {
-  originalUrl: string;
+  url: string;
   name: string;
   checksum: string;
 }
