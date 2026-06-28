@@ -294,7 +294,7 @@ export const createFileTable = (
     extends createTable<FileTableRecord, "url">(id, "url", records)
     implements FileTable
   {
-    toFile = (url: string, spinner?: Ora) =>
+    getFile = (url: string, spinner?: Ora) =>
       this.accessSome([url], spinner).then(([{ name, checksum }]) =>
         new File(name).verified(checksum),
       );

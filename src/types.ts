@@ -76,5 +76,5 @@ export interface FileTableRecord {
 }
 
 export interface FileTable extends Table<FileTableRecord, "url"> {
-  toFile: (url: string, spinner?: Ora) => Promise<File>;
+  getFile: (url: string, spinner?: Ora) => Promise<File>;
 }
