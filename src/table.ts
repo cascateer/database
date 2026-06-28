@@ -267,22 +267,20 @@ export const createTable = memoize(
       constructor() {
         super(id, key, records, TableInstance.actions);
 
-        TableInstance.actionsSubscription ??=
-          (console.log(id, key),
-          TableInstance.actions
-            .pipe(
-              reduceActions(this.applyActions, this.readActions),
-              mergeMap(async (action) => {
-                const path = resolve(this.path, `${action.id}.json`);
+        TableInstance.actionsSubscription ??= TableInstance.actions
+          .pipe(
+            reduceActions(this.applyActions, this.readActions),
+            mergeMap(async (action) => {
+              const path = resolve(this.path, `${action.id}.json`);
 
-                if (!existsSync(path)) {
-                  await writeFile(path, JSON.stringify(action));
-                }
+              if (!existsSync(path)) {
+                await writeFile(path, JSON.stringify(action));
+              }
 
-                return action;
-              }),
-            )
-            .subscribe());
+              return action;
+            }),
+          )
+          .subscribe();
       }
     },
   nthArg(0),
