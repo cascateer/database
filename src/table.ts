@@ -21,6 +21,7 @@ import { defaults } from "./defaults";
 import { File } from "./file";
 import { reduceActions } from "./observables/reduceActions";
 import {
+  FileTable,
   FileTableRecord,
   TableAction,
   TableActionCreator,
@@ -266,20 +267,22 @@ export const createTable = memoize(
       constructor() {
         super(id, key, records, TableInstance.actions);
 
-        TableInstance.actionsSubscription ??= TableInstance.actions
-          .pipe(
-            reduceActions(this.applyActions, this.readActions),
-            mergeMap(async (action) => {
-              const path = resolve(this.path, `${action.id}.json`);
+        TableInstance.actionsSubscription ??=
+          (console.log(id, key),
+          TableInstance.actions
+            .pipe(
+              reduceActions(this.applyActions, this.readActions),
+              mergeMap(async (action) => {
+                const path = resolve(this.path, `${action.id}.json`);
 
-              if (!existsSync(path)) {
-                await writeFile(path, JSON.stringify(action));
-              }
+                if (!existsSync(path)) {
+                  await writeFile(path, JSON.stringify(action));
+                }
 
-              return action;
-            }),
-          )
-          .subscribe();
+                return action;
+              }),
+            )
+            .subscribe());
       }
     },
   nthArg(0),
@@ -287,13 +290,14 @@ export const createTable = memoize(
 
 export const createFileTable = (
   id: string,
-  key: "url",
   records: TableRecordCreator<FileTableRecord, "url">,
-) => createTable<FileTableRecord, "url">(id, key, records);
-
-export class FileTable extends Table<FileTableRecord, "url"> {
-  toFile = (url: string, spinner?: Ora) =>
-    this.accessSome([url], spinner).then(([{ name, checksum }]) =>
-      new File(name).verified(checksum),
-    );
-}
+) =>
+  class
+    extends createTable<FileTableRecord, "url">(id, "url", records)
+    implements FileTable
+  {
+    toFile = (url: string, spinner?: Ora) =>
+      this.accessSome([url], spinner).then(([{ name, checksum }]) =>
+        new File(name).verified(checksum),
+      );
+  };
