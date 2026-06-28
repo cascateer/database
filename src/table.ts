@@ -18,8 +18,10 @@ import { resolve } from "path";
 import { mergeMap, NextObserver, Subject, Subscription } from "rxjs";
 import { v4 } from "uuid";
 import { defaults } from "./defaults";
+import { File } from "./file";
 import { reduceActions } from "./observables/reduceActions";
 import {
+  FileTableRecord,
   TableAction,
   TableActionCreator,
   TableActionCreatorResult,
@@ -282,3 +284,10 @@ export const createTable = memoize(
     },
   nthArg(0),
 );
+
+export class FileTable extends Table<FileTableRecord, "originalUrl"> {
+  fromUrl = (url: string, spinner?: Ora) =>
+    this.accessSome([url], spinner).then(([{ name, checksum }]) =>
+      new File(name).verified(checksum),
+    );
+}

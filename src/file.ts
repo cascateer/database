@@ -1,19 +1,12 @@
 import { createHash } from "crypto";
 import { createReadStream } from "fs";
-import { Ora } from "ora";
 import { extname, relative, resolve } from "path";
 import { defaults } from "./defaults";
-import { FileTable } from "./types";
 
 export class File {
   static BASE_URL = defaults.FILE_BASE_URL;
 
   static fromPath = (path: string) => new File(relative(this.BASE_URL, path));
-
-  static fromUrl = (table: FileTable, url: string, spinner?: Ora) =>
-    table
-      .accessSome([url], spinner)
-      .then(([{ name, checksum }]) => new File(name).verified(checksum));
 
   constructor(public name: string) {}
 
