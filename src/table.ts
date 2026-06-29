@@ -29,7 +29,7 @@ import {
   TableRecordCreator,
 } from "./types";
 
-class Table<R, K extends keyof R> {
+export class Table<R, K extends keyof R> {
   private static readonly BASE_URL = defaults.TABLE_BASE_URL;
 
   constructor(
@@ -89,19 +89,17 @@ class Table<R, K extends keyof R> {
           );
         }
         case "delete":
-          return without(records, this.selectById(records)(action.payload.id));
+          return without(records, this.selectById(records, action.payload.id));
       }
 
       return records;
     }, records);
 
   selectId = (record: R): R[K] => record[this.key];
-  selectById =
-    (records: R[]) =>
-    (id: R[K]): R => (
-      assert(findDupeBy(records, this.selectId) == null),
-      nonNullable(records.find((record) => this.selectId(record) === id))
-    );
+  selectById = (records: R[], id: R[K]): R => (
+    assert(findDupeBy(records, this.selectId) == null),
+    nonNullable(records.find((record) => this.selectId(record) === id))
+  );
 
   public async dispatch(
     ...args: NonNullable<TableAction<R, K>["args"]>
@@ -114,7 +112,7 @@ class Table<R, K extends keyof R> {
               thru(
                 args,
                 ([, id, predicate]) => (
-                  predicate(this.selectById(records)(id)),
+                  predicate(this.selectById(records, id)),
                   {
                     actions: [],
                     callback,
@@ -181,7 +179,7 @@ class Table<R, K extends keyof R> {
           this.observer.next(
             new LazyPromise((records) =>
               thru(args, async ([, id, predicate]) => {
-                const targetRecord = this.selectById(records)(id);
+                const targetRecord = this.selectById(records, id);
                 const updatedTargetRecord = await predicate(targetRecord);
 
                 return {
@@ -244,15 +242,13 @@ class Table<R, K extends keyof R> {
 
         this.records(difference(uniq(ids), currentIds), spinner),
       // @ts-expect-error
-    ).then((records) => ids.map(this.selectById(records)));
+    ).then((records) => ids.map((id) => this.selectById(records, id)));
   }
 
   public async accessAll(): Promise<R[]> {
     return new Promise<R[]>((resolve) => this.dispatch("all", resolve));
   }
 }
-
-export { type Table };
 
 export const createTable = memoize(
   <R, K extends keyof R>(
