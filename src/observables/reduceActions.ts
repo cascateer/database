@@ -1,6 +1,6 @@
 import { property } from "@cascateer/lib";
-import { flatMap } from "@cascateer/lib/observables";
-import { LazyPromise } from "@cascateer/lib/promises";
+import { flatMap } from "@cascateer/lib/observable";
+import { LazyPromise } from "@cascateer/lib/promise";
 import { Function1, last, noop, tap } from "lodash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
 import { TableAction, TableActionCreator } from "../types";

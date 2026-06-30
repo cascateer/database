@@ -1,5 +1,5 @@
 import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
-import { LazyPromise } from "@cascateer/lib/promises";
+import { LazyPromise } from "@cascateer/lib/promise";
 import assert from "assert";
 import { existsSync } from "fs";
 import { mkdir, readdir, readFile, writeFile } from "fs/promises";

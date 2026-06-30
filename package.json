@@ -14,7 +14,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cascateer/lib": "^1.0.50",
+    "@cascateer/lib": "^1.0.53",
     "lodash": "^4.18.1",
     "object-hash": "^3.0.0",
     "ora": "^9.4.1",

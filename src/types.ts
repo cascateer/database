@@ -1,5 +1,5 @@
 import { MaybePromise } from "@cascateer/lib";
-import { LazyPromise } from "@cascateer/lib/promises";
+import { LazyPromise } from "@cascateer/lib/promise";
 import { Function1 } from "lodash";
 import { Ora } from "ora";
 import { File } from "./file";
