@@ -4,7 +4,9 @@ import { extname, relative, resolve } from "path";
 import { defaults } from "./defaults";
 
 export class File {
-  static BASE_URL = defaults.FILE_BASE_URL;
+  static get BASE_URL() {
+    return defaults.FILE_BASE_URL;
+  }
 
   static fromPath = (path: string) => new File(relative(this.BASE_URL, path));
 
