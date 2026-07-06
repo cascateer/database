@@ -22,7 +22,7 @@ export const reduceActions =
       scan(
         (result, actions) =>
           result.then(({ records, actions: previousActions }) =>
-            actions.run(records).then(({ actions, callback }) => ({
+            actions.start(records).then(({ actions, callback }) => ({
               records: tap(transform(records, ...actions), callback ?? noop),
               actions: actions.map((action, actionIndex, actions) => ({
                 ...action,
