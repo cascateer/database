@@ -270,7 +270,7 @@ export const createTable = memoize(
               const path = resolve(this.path, `${action.id}.json`);
 
               if (!existsSync(path)) {
-                await writeFile(path, JSON.stringify(action));
+                await writeFile(path, JSON.stringify(action, null, "\t"));
               }
 
               return action;
