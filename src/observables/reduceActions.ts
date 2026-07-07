@@ -28,8 +28,6 @@ export const reduceActions =
                 callback ?? noop,
               );
 
-              const lastActionId = last(actions)?.id ?? previousActionId;
-
               if (!isInitialized && 0 in actions) {
                 if (actions[0].previousId != null) {
                   throw new Error();
@@ -46,7 +44,7 @@ export const reduceActions =
                       },
                     },
                   ],
-                  previousActionId: lastActionId,
+                  previousActionId: actions[0].id,
                   isInitialized: true,
                 };
               }
@@ -57,7 +55,7 @@ export const reduceActions =
                   ...action,
                   previousId: actions[actionIndex - 1]?.id ?? previousActionId,
                 })),
-                previousActionId: lastActionId,
+                previousActionId: last(actions)?.id ?? previousActionId,
               };
             }),
           ),
