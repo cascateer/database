@@ -81,14 +81,20 @@ export class Table<R, K extends keyof R> {
     );
 
     const actionsMap = fromPairs(
-      actions.map((action) => [action.previousId ?? "", [action]]),
+      actions.map((action) => [action.previousId ?? "", action]),
     );
 
+    const newActions = new Array<TableAction<R, K>>();
+    let action = actionsMap[""];
+
+    while (action != null) {
+      newActions.push(action);
+
+      action = actionsMap[action.id];
+    }
+
     return {
-      actions: actions.reduce(
-        (actions, action) => actions.concat(actionsMap[action.id] ?? []),
-        actionsMap[""] ?? [],
-      ),
+      actions: newActions,
     };
   });
 
