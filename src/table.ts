@@ -1,4 +1,4 @@
-import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
+import { findDupeBy, nonNullable, nthArg, property } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promise";
 import assert from "assert";
 import { existsSync } from "fs";
@@ -60,6 +60,10 @@ export class Table<R, K extends keyof R> {
         >(JSON.parse),
       );
     }
+
+    console.log(
+      `[${this.path}] Found actions${["", ...actions.map(property("id"))].join("\n\t")}`,
+    );
 
     const actionsMap = fromPairs(
       actions.map((action) => [action.previousId ?? "", [action]]),
@@ -268,24 +272,26 @@ export const createTable = memoize(
           .pipe(
             reduceActions(this.applyActions, this.readActions),
             mergeMap(async (action, actionIndex) => {
-              console.log(
-                JSON.stringify(action, null, "\t").slice(0, 300),
-                actionIndex,
-              );
-
               if (action.previousId == null) {
-                for (const file of await readdir(this.path)) {
+                const files = await readdir(this.path);
+
+                for (const file of files) {
                   await unlink(resolve(this.path, file));
                 }
+
+                console.log(
+                  `[${this.path}] Deleted actions${["", ...files].join("\n\t")}`,
+                );
               }
 
-              await writeFile(
-                resolve(
-                  this.path,
-                  `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
-                ),
-                JSON.stringify(action, null, "\t"),
+              const path = resolve(
+                this.path,
+                `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
               );
+
+              console.log(`[${this.path}] Writing action ${path}`);
+
+              await writeFile(path, JSON.stringify(action, null, "\t"));
 
               return action;
             }),
