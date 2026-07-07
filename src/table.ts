@@ -62,7 +62,7 @@ export class Table<R, K extends keyof R> {
     }
 
     console.log(
-      `[${this.path}] Found actions${["", ...actions.map(property("id"))].join("\n\t")}`,
+      `[${this.path}] Found actions${["", ...actions.map(property("id"))].join("\n\t📂 ")}`,
     );
 
     const actionsMap = fromPairs(
@@ -268,35 +268,37 @@ export const createTable = memoize(
       constructor() {
         super(id, key, records, TableInstance.actionsSubject);
 
-        TableInstance.actionsSubscription ??= TableInstance.actionsSubject
-          .pipe(
-            reduceActions(this.applyActions, this.readActions),
-            mergeMap(async (action, actionIndex) => {
-              if (action.previousId == null) {
-                const files = await readdir(this.path);
+        TableInstance.actionsSubscription ??=
+          (console.log(`[${this.path}] ✏️ Subscribing`),
+          TableInstance.actionsSubject
+            .pipe(
+              reduceActions(this.applyActions, this.readActions),
+              mergeMap(async (action, actionIndex) => {
+                if (action.previousId == null) {
+                  const files = await readdir(this.path);
 
-                for (const file of files) {
-                  await unlink(resolve(this.path, file));
+                  for (const file of files) {
+                    await unlink(resolve(this.path, file));
+                  }
+
+                  console.log(
+                    `[${this.path}]${["", ...files].join("\n\t❌ ")}`,
+                  );
                 }
 
-                console.log(
-                  `[${this.path}] Deleted actions${["", ...files].join("\n\t")}`,
+                const path = resolve(
+                  this.path,
+                  `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
                 );
-              }
 
-              const path = resolve(
-                this.path,
-                `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
-              );
+                console.log(`[${this.path}]\n\t💾 ${path}`);
 
-              console.log(`[${this.path}] Writing action ${path}`);
+                await writeFile(path, JSON.stringify(action, null, "\t"));
 
-              await writeFile(path, JSON.stringify(action, null, "\t"));
-
-              return action;
-            }),
-          )
-          .subscribe();
+                return action;
+              }),
+            )
+            .subscribe());
       }
     },
   nthArg(0),
