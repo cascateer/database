@@ -62,7 +62,7 @@ export class Table<R, K extends keyof R> {
     }
 
     console.log(
-      `[${this.path}] Found actions${["", ...actions.map(property("id"))].join("\n\t📂 ")}`,
+      `[${this.id}] Found actions${["", ...actions.map(property("id"))].join("\n\t📂 ")}`,
     );
 
     const actionsMap = fromPairs(
@@ -269,7 +269,7 @@ export const createTable = memoize(
         super(id, key, records, TableInstance.actionsSubject);
 
         TableInstance.actionsSubscription ??=
-          (console.log(`[${this.path}]\n\t✏️ Subscribing`),
+          (console.log(`[${this.id}]\n\t✏️ Subscribing`),
           TableInstance.actionsSubject
             .pipe(
               reduceActions(this.applyActions, this.readActions),
@@ -281,9 +281,7 @@ export const createTable = memoize(
                     await unlink(resolve(this.path, file));
                   }
 
-                  console.log(
-                    `[${this.path}]${["", ...files].join("\n\t❌ ")}`,
-                  );
+                  console.log(`[${this.id}]${["", ...files].join("\n\t❌ ")}`);
                 }
 
                 const path = resolve(
@@ -291,7 +289,7 @@ export const createTable = memoize(
                   `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
                 );
 
-                console.log(`[${this.path}]\n\t💾 ${path}`);
+                console.log(`[${this.id}]\n\t💾 ${path}`);
 
                 await writeFile(path, JSON.stringify(action, null, "\t"));
 
