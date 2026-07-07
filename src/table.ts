@@ -39,6 +39,17 @@ export class Table<R, K extends keyof R> {
     private observer: NextObserver<TableActionCreator<R, K>>,
   ) {}
 
+  get icon() {
+    return {
+      "youtube-videos": "📺",
+      "document-files": "📷",
+      "stream-files": "🎤",
+      "youtube-music-albums": "💿",
+      "spotify-albums": "🎧",
+      "youtube-playlists": "📻",
+    }[this.id];
+  }
+
   get path() {
     return resolve(Table.BASE_URL, this.id);
   }
@@ -62,7 +73,7 @@ export class Table<R, K extends keyof R> {
     }
 
     console.log(
-      `[${this.id}] Found actions${["", ...actions.map(property("id"))].join("\n\t📂 ")}`,
+      `[${this.icon}]${["", ...actions.map(property("id"))].join("\n\t📂 ")}`,
     );
 
     const actionsMap = fromPairs(
@@ -269,7 +280,7 @@ export const createTable = memoize(
         super(id, key, records, TableInstance.actionsSubject);
 
         TableInstance.actionsSubscription ??=
-          (console.log(`[${this.id}]\n\t✏️  Subscribing`),
+          (console.log(`[${this.icon}]\n\t✏️  Subscribing`),
           TableInstance.actionsSubject
             .pipe(
               reduceActions(this.applyActions, this.readActions),
@@ -281,7 +292,9 @@ export const createTable = memoize(
                     await unlink(resolve(this.path, file));
                   }
 
-                  console.log(`[${this.id}]${["", ...files].join("\n\t❌ ")}`);
+                  console.log(
+                    `[${this.icon}]${["", ...files].join("\n\t❌ ")}`,
+                  );
                 }
 
                 const path = resolve(
@@ -290,7 +303,7 @@ export const createTable = memoize(
                 );
 
                 console.log(
-                  `[${this.id}]\n\t💾 #${actionIndex} ${action.id}.json`,
+                  `[${this.icon}]\n\t💾 #${actionIndex} ${action.id}.json`,
                 );
 
                 await writeFile(path, JSON.stringify(action, null, "\t"));
