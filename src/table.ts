@@ -2,7 +2,7 @@ import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promise";
 import assert from "assert";
 import { existsSync } from "fs";
-import { mkdir, readdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "fs/promises";
 import {
   difference,
   fromPairs,
@@ -51,10 +51,9 @@ export class Table<R, K extends keyof R> {
       await mkdir(this.path, { recursive: true });
     }
 
-    const files = await readdir(this.path);
     const actions = new Array<TableAction<R, K>>();
 
-    for (const file of files) {
+    for (const file of await readdir(this.path)) {
       actions.push(
         await readFile(resolve(this.path, file), "utf-8").then<
           TableAction<R, K>
@@ -266,8 +265,17 @@ export const createTable = memoize(
         TableInstance.actionsSubscription ??= TableInstance.actions
           .pipe(
             reduceActions(this.applyActions, this.readActions),
-            mergeMap(async (action) => {
-              const path = resolve(this.path, `${action.id}.json`);
+            mergeMap(async (action, actionIndex) => {
+              if (action.previousId == null) {
+                for (const file of await readdir(this.path)) {
+                  await unlink(resolve(this.path, file));
+                }
+              }
+
+              const path = resolve(
+                this.path,
+                `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
+              );
 
               if (!existsSync(path)) {
                 await writeFile(path, JSON.stringify(action, null, "\t"));

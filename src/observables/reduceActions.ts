@@ -3,6 +3,7 @@ import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
 import { Function1, last, noop, tap } from "lodash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
+import { v4 } from "uuid";
 import { TableAction, TableActionCreator } from "../types";
 
 export const reduceActions =
@@ -20,16 +21,35 @@ export const reduceActions =
     source.pipe(
       startWith(seed),
       scan(
-        (result, actions) =>
+        (result, actions, actionsIndex) =>
           result.then(({ records, previousActionId }) =>
-            actions.start(records).then(({ actions, callback }) => ({
-              records: tap(transform(records, ...actions), callback ?? noop),
-              actions: actions.map((action, actionIndex, actions) => ({
-                ...action,
-                previousId: actions[actionIndex - 1]?.id ?? previousActionId,
-              })),
-              previousActionId: last(actions)?.id ?? previousActionId,
-            })),
+            actions.start(records).then(({ actions, callback }) => {
+              const transformedRecords = tap(
+                transform(records, ...actions),
+                callback ?? noop,
+              );
+
+              return {
+                records: transformedRecords,
+                actions:
+                  actionsIndex > 0
+                    ? actions.map((action, actionIndex, actions) => ({
+                        ...action,
+                        previousId:
+                          actions[actionIndex - 1]?.id ?? previousActionId,
+                      }))
+                    : [
+                        {
+                          id: v4(),
+                          type: "insert",
+                          payload: {
+                            records: transformedRecords,
+                          },
+                        },
+                      ],
+                previousActionId: last(actions)?.id ?? previousActionId,
+              };
+            }),
           ),
         Promise.resolve<{
           records: Array<R>;
