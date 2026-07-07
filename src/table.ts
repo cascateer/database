@@ -40,14 +40,18 @@ export class Table<R, K extends keyof R> {
   ) {}
 
   get icon() {
-    return {
-      "youtube-videos": "📺",
-      "document-files": "📷",
-      "stream-files": "🎤",
-      "youtube-music-albums": "💿",
-      "spotify-albums": "🎧",
-      "youtube-playlists": "📻",
-    }[this.id];
+    return (
+      {
+        "youtube-videos": "📺",
+        "document-files": "📷",
+        "stream-files": "🎤",
+        "youtube-music-albums": "💿",
+        "spotify-albums": "🎧",
+        "youtube-playlists": "📻",
+      }[this.id] +
+      "-" +
+      this.id
+    );
   }
 
   get path() {
