@@ -268,6 +268,11 @@ export const createTable = memoize(
           .pipe(
             reduceActions(this.applyActions, this.readActions),
             mergeMap(async (action, actionIndex) => {
+              console.log(
+                JSON.stringify(action, null, "\t").slice(0, 300),
+                actionIndex,
+              );
+
               if (action.previousId == null) {
                 for (const file of await readdir(this.path)) {
                   await unlink(resolve(this.path, file));
