@@ -269,7 +269,7 @@ export const createTable = memoize(
         super(id, key, records, TableInstance.actionsSubject);
 
         TableInstance.actionsSubscription ??=
-          (console.log(`[${this.path}] ✏️ Subscribing`),
+          (console.log(`[${this.path}]\n\t✏️ Subscribing`),
           TableInstance.actionsSubject
             .pipe(
               reduceActions(this.applyActions, this.readActions),
