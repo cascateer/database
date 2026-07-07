@@ -1,4 +1,4 @@
-import { findDupeBy, nonNullable, nthArg, property } from "@cascateer/lib";
+import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promise";
 import assert from "assert";
 import { existsSync } from "fs";
@@ -75,10 +75,6 @@ export class Table<R, K extends keyof R> {
         >(JSON.parse),
       );
     }
-
-    console.log(
-      `[${this.icon}]${["", ...actions.map(property("id"))].join("\n\t📂 ")}`,
-    );
 
     const actionsMap = fromPairs(
       actions.map((action) => [action.previousId ?? "", action]),
@@ -289,39 +285,29 @@ export const createTable = memoize(
       constructor() {
         super(id, key, records, TableInstance.actionsSubject);
 
-        TableInstance.actionsSubscription ??=
-          (console.log(`[${this.icon}]\n\t✏️  Subscribing`),
-          TableInstance.actionsSubject
-            .pipe(
-              reduceActions(this.applyActions, this.readActions),
-              mergeMap(async (action, actionIndex) => {
-                if (action.previousId == null) {
-                  const files = await readdir(this.path);
+        TableInstance.actionsSubscription ??= TableInstance.actionsSubject
+          .pipe(
+            reduceActions(this.applyActions, this.readActions),
+            mergeMap(async (action, actionIndex) => {
+              if (action.previousId == null) {
+                const files = await readdir(this.path);
 
-                  for (const file of files) {
-                    await unlink(resolve(this.path, file));
-                  }
-
-                  console.log(
-                    `[${this.icon}]${["", ...files].join("\n\t❌ ")}`,
-                  );
+                for (const file of files) {
+                  await unlink(resolve(this.path, file));
                 }
+              }
 
-                const path = resolve(
-                  this.path,
-                  `A${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
-                );
+              const path = resolve(
+                this.path,
+                `A${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
+              );
 
-                console.log(
-                  `[${this.icon}]\n\t💾 #${actionIndex} ${action.id}.json`,
-                );
+              await writeFile(path, JSON.stringify(action, null, "\t"));
 
-                await writeFile(path, JSON.stringify(action, null, "\t"));
-
-                return action;
-              }),
-            )
-            .subscribe());
+              return action;
+            }),
+          )
+          .subscribe();
       }
     },
   nthArg(0),
