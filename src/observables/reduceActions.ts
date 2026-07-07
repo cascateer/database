@@ -21,20 +21,20 @@ export const reduceActions =
       startWith(seed),
       scan(
         (result, actions) =>
-          result.then(({ records, previousId }) =>
+          result.then(({ records, previousActionId }) =>
             actions.start(records).then(({ actions, callback }) => ({
               records: tap(transform(records, ...actions), callback ?? noop),
               actions: actions.map((action, actionIndex, actions) => ({
                 ...action,
-                previousId: actions[actionIndex - 1]?.id ?? previousId,
+                previousId: actions[actionIndex - 1]?.id ?? previousActionId,
               })),
-              previousId: actions.length > 0 ? last(actions)?.id : previousId,
+              previousActionId: last(actions)?.id ?? previousActionId,
             })),
           ),
         Promise.resolve<{
           records: Array<R>;
           actions: Array<TableAction<R, K>>;
-          previousId?: string;
+          previousActionId?: string;
         }>({
           records: [],
           actions: [],
