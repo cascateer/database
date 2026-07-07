@@ -256,13 +256,15 @@ export const createTable = memoize(
     records: TableRecordCreator<R, K>,
   ) =>
     class TableInstance extends Table<R, K> {
-      private static readonly actions = new Subject<TableActionCreator<R, K>>();
+      private static readonly actionsSubject = new Subject<
+        TableActionCreator<R, K>
+      >();
       private static actionsSubscription?: Subscription;
 
       constructor() {
-        super(id, key, records, TableInstance.actions);
+        super(id, key, records, TableInstance.actionsSubject);
 
-        TableInstance.actionsSubscription ??= TableInstance.actions
+        TableInstance.actionsSubscription ??= TableInstance.actionsSubject
           .pipe(
             reduceActions(this.applyActions, this.readActions),
             mergeMap(async (action, actionIndex) => {
@@ -272,14 +274,13 @@ export const createTable = memoize(
                 }
               }
 
-              const path = resolve(
-                this.path,
-                `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
+              await writeFile(
+                resolve(
+                  this.path,
+                  `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
+                ),
+                JSON.stringify(action, null, "\t"),
               );
-
-              if (!existsSync(path)) {
-                await writeFile(path, JSON.stringify(action, null, "\t"));
-              }
 
               return action;
             }),
