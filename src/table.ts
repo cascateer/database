@@ -269,7 +269,7 @@ export const createTable = memoize(
         super(id, key, records, TableInstance.actionsSubject);
 
         TableInstance.actionsSubscription ??=
-          (console.log(`[${this.id}]\n\t✏️ Subscribing`),
+          (console.log(`[${this.id}]\n\t✏️  Subscribing`),
           TableInstance.actionsSubject
             .pipe(
               reduceActions(this.applyActions, this.readActions),
@@ -286,7 +286,7 @@ export const createTable = memoize(
 
                 const path = resolve(
                   this.path,
-                  `${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
+                  `A${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
                 );
 
                 console.log(`[${this.id}]\n\t💾 ${path}`);
