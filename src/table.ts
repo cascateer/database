@@ -289,7 +289,9 @@ export const createTable = memoize(
                   `A${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
                 );
 
-                console.log(`[${this.id}]\n\t💾 ${path}`);
+                console.log(
+                  `[${this.id}]\n\t💾 #${actionIndex} ${action.id}.json`,
+                );
 
                 await writeFile(path, JSON.stringify(action, null, "\t"));
 
