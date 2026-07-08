@@ -39,21 +39,6 @@ export class Table<R, K extends keyof R> {
     private observer: NextObserver<TableActionCreator<R, K>>,
   ) {}
 
-  get icon() {
-    return (
-      {
-        "youtube-videos": "📺",
-        "document-files": "📷",
-        "stream-files": "🎤",
-        "youtube-music-albums": "💿",
-        "spotify-albums": "🎧",
-        "youtube-playlists": "📻",
-      }[this.id] +
-      "-" +
-      this.id
-    );
-  }
-
   get path() {
     return resolve(Table.BASE_URL, this.id);
   }
@@ -118,7 +103,16 @@ export class Table<R, K extends keyof R> {
   selectId = (record: R): R[K] => record[this.key];
   selectById = (records: R[], id: R[K]): R => (
     assert(findDupeBy(records, this.selectId) == null),
-    nonNullable(records.find((record) => this.selectId(record) === id))
+    thru(
+      records.find((record) => this.selectId(record) === id),
+      (record) => {
+        if (record == null) {
+          console.error(`No record w/ id ${id} found in table ${this.id}`);
+        }
+
+        return nonNullable(record);
+      },
+    )
   );
 
   public async dispatch(
@@ -128,97 +122,108 @@ export class Table<R, K extends keyof R> {
       switch (args[0]) {
         case "one":
           this.observer.next(
-            new LazyPromise((records) =>
-              thru(
-                args,
-                ([, id, predicate]) => (
-                  predicate(this.selectById(records, id)),
-                  {
-                    actions: [],
-                    callback,
-                  }
+            new LazyPromise(
+              (records): TableActionCreatorResult<R, K> =>
+                thru(
+                  args,
+                  ([, id, predicate]) => (
+                    predicate(this.selectById(records, id)),
+                    {
+                      actions: [],
+                      callback,
+                    }
+                  ),
                 ),
-              ),
             ),
           );
 
           break;
         case "all":
           this.observer.next(
-            new LazyPromise((records) =>
-              thru(
-                args,
-                ([, predicate]) => (
-                  predicate(records),
-                  {
-                    actions: [],
-                    callback,
-                  }
+            new LazyPromise(
+              (records): TableActionCreatorResult<R, K> =>
+                thru(
+                  args,
+                  ([, predicate]) => (
+                    predicate(records),
+                    {
+                      actions: [],
+                      callback,
+                    }
+                  ),
                 ),
-              ),
             ),
           );
 
           break;
         case "insert":
           this.observer.next(
-            new LazyPromise(async (records) => {
-              const [, predicate] = args;
+            new LazyPromise(
+              async (records): Promise<TableActionCreatorResult<R, K>> => {
+                const [, predicate] = args;
 
-              const newRecords = await predicate(records.map(this.selectId));
-              const conflictingIds = intersectionBy(
-                newRecords,
-                records,
-                this.selectId,
-              );
+                const newRecords = await predicate(records.map(this.selectId));
+                const conflictingIds = intersectionBy(
+                  newRecords,
+                  records,
+                  this.selectId,
+                );
 
-              if (conflictingIds.length > 0) {
-                throw new Error(`conflicting ids ${conflictingIds.join(", ")}`);
-              }
-
-              return {
-                actions:
-                  newRecords.length > 0
-                    ? [
-                        {
-                          id: v4(),
-                          type: "insert",
-                          payload: {
-                            records: newRecords,
-                          },
-                        },
-                      ]
-                    : [],
-                callback,
-              };
-            }),
-          );
-
-          break;
-        case "update":
-          this.observer.next(
-            new LazyPromise((records) =>
-              thru(args, async ([, id, predicate]) => {
-                const targetRecord = this.selectById(records, id);
-                const updatedTargetRecord = await predicate(targetRecord);
+                if (conflictingIds.length > 0) {
+                  throw new Error(
+                    `conflicting ids ${conflictingIds.join(", ")}`,
+                  );
+                }
 
                 return {
                   actions:
-                    objectHash(targetRecord ?? null) !==
-                    objectHash(updatedTargetRecord ?? null)
+                    newRecords.length > 0
                       ? [
                           {
                             id: v4(),
-                            type: "update",
+                            type: "insert",
                             payload: {
-                              record: updatedTargetRecord,
+                              records: newRecords,
                             },
                           },
                         ]
                       : [],
                   callback,
                 };
-              }),
+              },
+            ),
+          );
+
+          break;
+        case "update":
+          this.observer.next(
+            new LazyPromise((records) =>
+              thru(
+                args,
+                async ([, id, predicate]): Promise<
+                  TableActionCreatorResult<R, K>
+                > => {
+                  const targetRecord = this.selectById(records, id);
+                  const updatedTargetRecord = await predicate(targetRecord);
+
+                  return {
+                    actions:
+                      objectHash(targetRecord ?? null) !==
+                      objectHash(updatedTargetRecord ?? null)
+                        ? [
+                            {
+                              id: v4(),
+                              type: "update",
+                              payload: {
+                                record: updatedTargetRecord,
+                              },
+                            },
+                          ]
+                        : [],
+                    callback,
+                  };
+                },
+              ),
             ),
           );
 
@@ -226,20 +231,25 @@ export class Table<R, K extends keyof R> {
         case "delete":
           this.observer.next(
             new LazyPromise((records) =>
-              thru(args, ([, id]) => ({
-                actions: records.some((record) => this.selectId(record) === id)
-                  ? [
-                      {
-                        id: v4(),
-                        type: "delete",
-                        payload: {
-                          id,
+              thru(
+                args,
+                ([, id]): TableActionCreatorResult<R, K> => ({
+                  actions: records.some(
+                    (record) => this.selectId(record) === id,
+                  )
+                    ? [
+                        {
+                          id: v4(),
+                          type: "delete",
+                          payload: {
+                            id,
+                          },
                         },
-                      },
-                    ]
-                  : [],
-                callback,
-              })),
+                      ]
+                    : [],
+                  callback,
+                }),
+              ),
             ),
           );
       }
