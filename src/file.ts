@@ -1,14 +1,14 @@
+import { envConfig } from "@cascateer/lib";
 import { createHash } from "crypto";
 import { createReadStream } from "fs";
 import { readFile } from "fs/promises";
 import { lookup } from "mime-types";
 import { extname, relative, resolve } from "path";
-import { defaults } from "./defaults";
+
+const { DATABASE_FILE_BASE_URL = "files" } = envConfig();
 
 export class File {
-  static get BASE_URL() {
-    return defaults.FILE_BASE_URL;
-  }
+  static readonly BASE_URL = DATABASE_FILE_BASE_URL;
 
   static fromPath = (path: string) => new File(relative(this.BASE_URL, path));
 

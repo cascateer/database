@@ -1,4 +1,4 @@
-import { findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
+import { envConfig, findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promise";
 import assert from "assert";
 import { existsSync } from "fs";
@@ -17,7 +17,6 @@ import { Ora } from "ora";
 import { resolve } from "path";
 import { mergeMap, NextObserver, Subject, Subscription } from "rxjs";
 import { v4 } from "uuid";
-import { defaults } from "./defaults";
 import { File } from "./file";
 import { reduceActions } from "./observables/reduceActions";
 import {
@@ -29,8 +28,10 @@ import {
   TableRecordCreator,
 } from "./types";
 
+const { DATABASE_TABLE_BASE_URL = "tables" } = envConfig();
+
 export class Table<R, K extends keyof R> {
-  private static readonly BASE_URL = defaults.TABLE_BASE_URL;
+  private static readonly BASE_URL = DATABASE_TABLE_BASE_URL;
 
   constructor(
     public id: string,
