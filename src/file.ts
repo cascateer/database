@@ -1,5 +1,7 @@
 import { createHash } from "crypto";
 import { createReadStream } from "fs";
+import { readFile } from "fs/promises";
+import { lookup } from "mime-types";
 import { extname, relative, resolve } from "path";
 import { defaults } from "./defaults";
 
@@ -41,6 +43,13 @@ export class File {
     }
 
     throw new Error();
+  }
+
+  async dataUrl() {
+    return readFile(this.path).then(
+      (data) =>
+        `data:${lookup(this.path)};base64,${Buffer.from(data).toString("base64")}`,
+    );
   }
 
   toString(): string {
