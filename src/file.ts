@@ -46,6 +46,8 @@ export class File {
   }
 
   async dataUrl() {
+    console.log(`Generating dataURL of file ${this.path}`);
+
     return readFile(this.path).then(
       (data) =>
         `data:${lookup(this.path)};base64,${Buffer.from(data).toString("base64")}`,
