@@ -12,6 +12,9 @@ export class File {
 
   static fromPath = (path: string) => new File(relative(this.BASE_URL, path));
 
+  static fromName = (name: string) =>
+    this.fromPath(resolve(this.BASE_URL, name));
+
   constructor(public name: string) {}
 
   get path() {
