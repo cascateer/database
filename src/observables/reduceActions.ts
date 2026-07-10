@@ -1,7 +1,7 @@
 import { property } from "@cascateer/lib";
 import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
-import { Function1, last, tap, thru } from "lodash";
+import { Function1, last, noop, tap, thru } from "lodash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
 import { TableAction, TableActionCreator } from "../types";
 
@@ -23,32 +23,32 @@ export const reduceActions =
         (result, actions) =>
           result.then(({ records, previousAction }) =>
             actions.start(records).then(({ actions, callback }) => {
-              const transformedRecords = transform(records, ...actions);
+              const transformedRecords = tap(
+                transform(records, ...actions),
+                callback ?? noop,
+              );
 
-              return tap(
-                thru(
-                  previousAction == null && 0 in actions
-                    ? [
-                        <TableAction<R, K>>{
-                          id: actions[0].id,
-                          type: "insert",
-                          payload: {
-                            records: transformedRecords,
-                          },
+              return thru(
+                previousAction == null && 0 in actions
+                  ? [
+                      <TableAction<R, K>>{
+                        id: actions[0].id,
+                        type: "insert",
+                        payload: {
+                          records: transformedRecords,
                         },
-                      ]
-                    : actions.map((action, actionIndex, actions) => ({
-                        ...action,
-                        previousId:
-                          actions[actionIndex - 1]?.id ?? previousAction?.id,
-                      })),
-                  (actions) => ({
-                    records: transformedRecords,
-                    actions,
-                    previousAction: last(actions) ?? previousAction,
-                  }),
-                ),
-                () => callback?.call(null, transformedRecords),
+                      },
+                    ]
+                  : actions.map((action, actionIndex, actions) => ({
+                      ...action,
+                      previousId:
+                        actions[actionIndex - 1]?.id ?? previousAction?.id,
+                    })),
+                (actions) => ({
+                  records: transformedRecords,
+                  actions,
+                  previousAction: last(actions) ?? previousAction,
+                }),
               );
             }),
           ),
