@@ -1,8 +1,9 @@
 import { property } from "@cascateer/lib";
 import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
-import { Function1, last, noop, tap, thru } from "lodash";
+import { chunk, Function1, last, noop, tap, thru } from "lodash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
+import { v4 } from "uuid";
 import { TableAction, TableActionCreator } from "../types";
 
 export const reduceActions =
@@ -30,15 +31,18 @@ export const reduceActions =
 
               return thru(
                 previousAction == null && 0 in actions
-                  ? [
-                      <TableAction<R, K>>{
-                        id: actions[0].id,
-                        type: "insert",
-                        payload: {
-                          records: transformedRecords,
-                        },
-                      },
-                    ]
+                  ? chunk(transformedRecords, 40).reduce(
+                      (actions, records) =>
+                        actions.concat({
+                          id: v4(),
+                          previousId: last(actions)?.id,
+                          type: "insert",
+                          payload: {
+                            records,
+                          },
+                        }),
+                      new Array<TableAction<R, K>>(),
+                    )
                   : actions.map((action, actionIndex, actions) => ({
                       ...action,
                       previousId:
