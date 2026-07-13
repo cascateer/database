@@ -43,9 +43,10 @@ export const reduceActions =
                         }),
                       new Array<TableAction<R, K>>(),
                     )
-                  : actions.map((action, _, actions) => ({
+                  : actions.map((action, actionIndex, actions) => ({
                       ...action,
-                      previousId: last(actions)?.id ?? previousAction?.id,
+                      previousId:
+                        actions[actionIndex - 1]?.id ?? previousAction?.id,
                     })),
                 (actions) => ({
                   records: transformedRecords,
