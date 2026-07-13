@@ -30,7 +30,7 @@ export const reduceActions =
               );
 
               return thru(
-                previousAction == null && 0 in actions
+                previousAction == null && actions.length > 0
                   ? chunk(transformedRecords, 40).reduce(
                       (actions, records) =>
                         actions.concat({
