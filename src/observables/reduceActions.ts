@@ -2,8 +2,8 @@ import { property } from "@cascateer/lib";
 import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
 import { chunk, Function1, last, noop, tap, thru } from "lodash";
+import objectHash from "object-hash";
 import { mergeAll, OperatorFunction, scan, startWith } from "rxjs";
-import { v4 } from "uuid";
 import { TableAction, TableActionCreator } from "../types";
 
 export const reduceActions =
@@ -34,7 +34,7 @@ export const reduceActions =
                   ? chunk(transformedRecords, 40).reduce(
                       (actions, records) =>
                         actions.concat({
-                          id: v4(),
+                          id: objectHash(records),
                           previousId: last(actions)?.id,
                           type: "insert",
                           payload: {
