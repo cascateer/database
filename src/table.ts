@@ -15,7 +15,7 @@ import {
 import objectHash from "object-hash";
 import { Ora } from "ora";
 import { resolve } from "path";
-import { mergeMap, NextObserver, Subject, Subscription } from "rxjs";
+import { concatMap, NextObserver, Subject, Subscription } from "rxjs";
 import { v4 } from "uuid";
 import { File } from "./file";
 import { reduceActions } from "./observables/reduceActions";
@@ -299,7 +299,7 @@ export const createTable = memoize(
         TableInstance.actionsSubscription ??= TableInstance.actionsSubject
           .pipe(
             reduceActions(this.applyActions, this.readActions),
-            mergeMap(async (action, actionIndex) => {
+            concatMap(async (action, actionIndex) => {
               console.log(id, action.id, action.previousId);
 
               if (action.previousId == null) {
