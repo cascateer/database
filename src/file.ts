@@ -25,15 +25,19 @@ export class File {
     return extname(this.path);
   }
 
-  async hash() {
+  static hash(path: string) {
     return new Promise<string>((resolve, reject) => {
       const hash = createHash("md5");
 
-      createReadStream(this.path)
+      createReadStream(path)
         .on("error", (error) => reject(error.message))
         .on("data", (data) => hash.update(data))
         .on("end", () => resolve(hash.digest("hex")));
     });
+  }
+
+  async hash() {
+    return File.hash(this.path);
   }
 
   async verify(checksum?: string): Promise<boolean> {

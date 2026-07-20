@@ -48,10 +48,10 @@ export type TableAction<
   Type extends keyof TableActions<R, K> = keyof TableActions<R, K>,
 > = BaseTableAction<Type> &
   {
-    [Type in keyof TableActions<R, K>]: {
-      type: Type;
-      payload: TableActions<R, K>[Type]["payload"];
-      args?: [Type, ...TableActions<R, K>[Type]["dispatch"]];
+    [T in Type]: {
+      type: T;
+      payload: TableActions<R, K>[T]["payload"];
+      args?: [T, ...TableActions<R, K>[T]["dispatch"]];
     };
   }[Type];
 
