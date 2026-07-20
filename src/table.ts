@@ -25,6 +25,7 @@ import {
   TableAction,
   TableActionCreator,
   TableActionCreatorResult,
+  TableActionDispatchArgsUnion,
   TableRecordCreator,
 } from "./types";
 
@@ -117,7 +118,7 @@ export class Table<R, K extends keyof R> {
   );
 
   public async dispatch(
-    ...args: NonNullable<TableAction<R, K>["args"]>
+    ...args: TableActionDispatchArgsUnion<R, K>
   ): Promise<R[]> {
     return new Promise<R[]>((callback) => {
       switch (args[0]) {

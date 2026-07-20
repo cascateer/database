@@ -13,47 +13,51 @@ interface BaseTableAction<Type> {
   args?: [Type, ...unknown[]];
 }
 
-interface TableActions<R, K extends keyof R> {
-  one: {
-    payload: never;
-    dispatch: [id: R[K], predicate: Function1<R, void>];
-  };
-  all: {
-    payload: never;
-    dispatch: [predicate: Function1<R[], void>];
-  };
+export interface TableActionPayloads<R, K extends keyof R> {
+  one: never;
+  all: never;
   insert: {
-    payload: {
-      records: R[];
-    };
-    dispatch: [predicate: Function1<R[K][], MaybePromise<R[]>>];
+    records: R[];
   };
   update: {
-    payload: {
-      record: R;
-    };
-    dispatch: [id: R[K], predicate: Function1<R, MaybePromise<R>>];
+    record: R;
   };
   delete: {
-    payload: {
-      id: R[K];
-    };
-    dispatch: [id: R[K]];
+    id: R[K];
   };
 }
 
 export type TableAction<
   R,
   K extends keyof R = keyof R,
-  Type extends keyof TableActions<R, K> = keyof TableActions<R, K>,
+  Type extends keyof TableActionPayloads<R, K> = keyof TableActionPayloads<
+    R,
+    K
+  >,
 > = BaseTableAction<Type> &
   {
     [T in Type]: {
       type: T;
-      payload: TableActions<R, K>[T]["payload"];
-      args?: [T, ...TableActions<R, K>[T]["dispatch"]];
+      payload: TableActionPayloads<R, K>[T];
     };
   }[Type];
+
+export interface TableActionDispatchArgs<R, K extends keyof R> {
+  one: [id: R[K], predicate: Function1<R, void>];
+  all: [predicate: Function1<R[], void>];
+  insert: [predicate: Function1<R[K][], MaybePromise<R[]>>];
+  update: [id: R[K], predicate: Function1<R, MaybePromise<R>>];
+  delete: [id: R[K]];
+}
+
+export type TableActionDispatchArgsUnion<
+  R,
+  K extends keyof R,
+  Type extends keyof TableActionDispatchArgs<R, K> =
+    keyof TableActionDispatchArgs<R, K>,
+> = {
+  [T in Type]: [T, ...TableActionDispatchArgs<R, K>[T]];
+}[Type];
 
 export interface TableActionCreator<R, K extends keyof R> extends LazyPromise<
   R[],
