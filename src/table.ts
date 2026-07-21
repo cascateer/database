@@ -1,6 +1,5 @@
-import { envConfig, findDupeBy, nonNullable, nthArg } from "@cascateer/lib";
+import { envConfig, nonNullable, nthArg } from "@cascateer/lib";
 import { LazyPromise } from "@cascateer/lib/promise";
-import assert from "assert";
 import { existsSync } from "fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "fs/promises";
 import {
@@ -8,6 +7,7 @@ import {
   fromPairs,
   intersectionBy,
   memoize,
+  tap,
   thru,
   uniq,
   without,
@@ -103,19 +103,19 @@ export class Table<R, K extends keyof R> {
     }, records);
 
   selectId = (record: R): R[K] => record[this.key];
-  selectById = (records: R[], id: R[K]): R => (
-    assert(findDupeBy(records, this.selectId) == null),
-    thru(
+
+  trySelectById = (records: R[], id: R[K]): R | undefined =>
+    tap(
       records.find((record) => this.selectId(record) === id),
       (record) => {
         if (record == null) {
-          console.error(`No record w/ id ${id} found in table ${this.id}`);
+          console.warn(`No record w/ id ${id} found in table ${this.id}`);
         }
-
-        return nonNullable(record);
       },
-    )
-  );
+    );
+
+  selectById = (records: R[], id: R[K]): R =>
+    nonNullable(this.trySelectById(records, id));
 
   public async dispatch(
     ...args: TableActionDispatchArgsUnion<R, K>
@@ -172,24 +172,24 @@ export class Table<R, K extends keyof R> {
                 );
 
                 if (conflictingIds.length > 0) {
-                  throw new Error(
-                    `conflicting ids ${conflictingIds.join(", ")}`,
-                  );
+                  console.warn(`conflicting ids ${conflictingIds.join(", ")}`);
+
+                  return {
+                    actions: [],
+                    callback,
+                  };
                 }
 
                 return {
-                  actions:
-                    newRecords.length > 0
-                      ? [
-                          {
-                            id: v4(),
-                            type: "insert",
-                            payload: {
-                              records: newRecords,
-                            },
-                          },
-                        ]
-                      : [],
+                  actions: [
+                    {
+                      id: v4(),
+                      type: "insert" as const,
+                      payload: {
+                        records: newRecords,
+                      },
+                    },
+                  ].slice(0, Math.min(1, newRecords.length)),
                   callback,
                 };
               },
@@ -248,7 +248,11 @@ export class Table<R, K extends keyof R> {
                           },
                         },
                       ]
-                    : [],
+                    : tap([], () => {
+                        console.warn(
+                          `record ${id} cannot be deleted, because it doesn't exist`,
+                        );
+                      }),
                   callback,
                 }),
               ),
@@ -306,7 +310,7 @@ export const createTable = memoize(
         TableInstance.actionsSubscription ??= TableInstance.actionsSubject
           .pipe(
             reduceActions(this.applyActions, this.readActions),
-            concatMap(async (action, actionIndex) => {
+            concatMap(async (action) => {
               if (action.previousId == null) {
                 const files = await readdir(this.path);
 
@@ -317,7 +321,7 @@ export const createTable = memoize(
 
               const path = resolve(
                 this.path,
-                `A${actionIndex.toString().padStart(6, "0")}-${action.id}.json`,
+                `A${action.id.padStart(6, "0")}.json`,
               );
 
               await writeFile(path, JSON.stringify(action, null, "\t"));

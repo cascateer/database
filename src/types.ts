@@ -43,7 +43,7 @@ export type TableAction<
   }[Type];
 
 export interface TableActionDispatchArgs<R, K extends keyof R> {
-  one: [id: R[K], predicate: Function1<R, void>];
+  one: [id: R[K], predicate: Function1<R | undefined, void>];
   all: [predicate: Function1<R[], void>];
   insert: [predicate: Function1<R[K][], MaybePromise<R[]>>];
   update: [id: R[K], predicate: Function1<R, MaybePromise<R>>];
