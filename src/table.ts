@@ -1,12 +1,17 @@
-import { envConfig, nonNullable, nthArg } from "@cascateer/lib";
+import { envConfig, nonNullable, nthArg, property } from "@cascateer/lib";
+import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
 import { existsSync } from "fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "fs/promises";
 import {
+  chunk,
   difference,
   fromPairs,
+  Function1,
   intersectionBy,
+  last,
   memoize,
+  noop,
   tap,
   thru,
   uniq,
@@ -15,10 +20,18 @@ import {
 import objectHash from "object-hash";
 import { Ora } from "ora";
 import { resolve } from "path";
-import { concatMap, NextObserver, Subject, Subscription } from "rxjs";
+import {
+  concatMap,
+  mergeAll,
+  NextObserver,
+  OperatorFunction,
+  scan,
+  startWith,
+  Subject,
+  Subscription,
+} from "rxjs";
 import { v4 } from "uuid";
 import { File } from "./file";
-import { reduceActions } from "./observables/reduceActions";
 import {
   FileTable,
   FileTableRecord,
@@ -279,6 +292,92 @@ export class Table<R, K extends keyof R> {
   public async getAll(): Promise<R[]> {
     return new Promise<R[]>((resolve) => this.dispatch("all", resolve));
   }
+
+  reduceActions =
+    <R, K extends keyof R>(
+      transform: (records: R[], ...actions: TableAction<R, K>[]) => R[],
+      seed: LazyPromise<
+        R[],
+        {
+          actions: TableAction<R, K>[];
+          callback?: Function1<R[], void>;
+        }
+      >,
+    ): OperatorFunction<TableActionCreator<R, K>, TableAction<R, K>> =>
+    (source) =>
+      source.pipe(
+        startWith(seed),
+        scan(
+          (result, actions) =>
+            result.then(({ records, previousAction }) =>
+              actions.start(records).then(({ actions, callback }) => {
+                const transformedRecords = tap(
+                  transform(records, ...actions),
+                  callback ?? noop,
+                );
+
+                return thru(
+                  previousAction == null && actions.length > 0
+                    ? chunk(transformedRecords, 40).reduce(
+                        (actions, records, id) =>
+                          actions.concat({
+                            id: `${id}`,
+                            previousId: last(actions)?.id,
+                            type: "insert",
+                            payload: {
+                              records,
+                            },
+                          }),
+                        new Array<TableAction<R, K>>(),
+                      )
+                    : actions.map((action, actionIndex, actions) => {
+                        const previousId =
+                          actions[actionIndex - 1]?.id ?? previousAction!.id;
+
+                        return {
+                          ...action,
+                          id: `${+previousId + 1}`,
+                          previousId,
+                        };
+                      }),
+                  (actions) => ({
+                    records: transformedRecords,
+                    actions,
+                    previousAction: last(actions) ?? previousAction,
+                  }),
+                );
+              }),
+            ),
+          Promise.resolve<{
+            records: Array<R>;
+            actions: Array<TableAction<R, K>>;
+            previousAction?: TableAction<R, K>;
+          }>({
+            records: [],
+            actions: [],
+          }),
+        ),
+        mergeAll(),
+        flatMap(property("actions")),
+        concatMap(async (action) => {
+          if (action.previousId == null) {
+            const files = await readdir(this.path);
+
+            for (const file of files) {
+              await unlink(resolve(this.path, file));
+            }
+          }
+
+          const path = resolve(
+            this.path,
+            `A${action.id.padStart(6, "0")}.json`,
+          );
+
+          await writeFile(path, JSON.stringify(action, null, "\t"));
+
+          return action;
+        }),
+      );
 }
 
 export const createTable = memoize(
@@ -297,27 +396,7 @@ export const createTable = memoize(
         super(id, key, records, TableInstance.actionsSubject);
 
         TableInstance.actionsSubscription ??= TableInstance.actionsSubject
-          .pipe(
-            reduceActions(this.applyActions, this.readActions),
-            concatMap(async (action) => {
-              if (action.previousId == null) {
-                const files = await readdir(this.path);
-
-                for (const file of files) {
-                  await unlink(resolve(this.path, file));
-                }
-              }
-
-              const path = resolve(
-                this.path,
-                `A${action.id.padStart(6, "0")}.json`,
-              );
-
-              await writeFile(path, JSON.stringify(action, null, "\t"));
-
-              return action;
-            }),
-          )
+          .pipe(this.reduceActions(this.applyActions, this.readActions))
           .subscribe();
       }
     },
