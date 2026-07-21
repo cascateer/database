@@ -1,4 +1,4 @@
-import { envConfig, nonNullable, nthArg, property } from "@cascateer/lib";
+import { envConfig, nonNullable, nthArg } from "@cascateer/lib";
 import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
 import { existsSync } from "fs";
@@ -22,6 +22,7 @@ import { Ora } from "ora";
 import { resolve } from "path";
 import {
   concatMap,
+  identity,
   mergeAll,
   NextObserver,
   OperatorFunction,
@@ -358,25 +359,27 @@ export class Table<R, K extends keyof R> {
           }),
         ),
         mergeAll(),
-        flatMap(property("actions")),
-        concatMap(async (action) => {
-          if (action.previousId == null) {
-            const files = await readdir(this.path);
+        concatMap(async ({ actions }) => {
+          for (const action of actions) {
+            if (action.previousId == null) {
+              const files = await readdir(this.path);
 
-            for (const file of files) {
-              await unlink(resolve(this.path, file));
+              for (const file of files) {
+                await unlink(resolve(this.path, file));
+              }
             }
+
+            const path = resolve(
+              this.path,
+              `A${action.id.padStart(6, "0")}.json`,
+            );
+
+            await writeFile(path, JSON.stringify(action, null, "\t"));
           }
 
-          const path = resolve(
-            this.path,
-            `A${action.id.padStart(6, "0")}.json`,
-          );
-
-          await writeFile(path, JSON.stringify(action, null, "\t"));
-
-          return action;
+          return actions;
         }),
+        flatMap(identity),
       );
 }
 
