@@ -258,13 +258,13 @@ export class Table<R, K extends keyof R> {
     });
   }
 
-  public async accessOne(id: R[K], spinner?: Ora): Promise<R> {
+  public async getsertOne(id: R[K], spinner?: Ora): Promise<R> {
     return this.dispatch("insert", (currentIds: R[K][]) =>
       this.records(difference([id], currentIds), spinner),
     ).then((records) => this.selectById(records, id));
   }
 
-  public async accessSome<A extends R[K][]>(
+  public async getsertMany<A extends R[K][]>(
     [...ids]: [...A],
     spinner?: Ora,
   ): Promise<[...{ [K in keyof A]: R }]> {
@@ -340,7 +340,7 @@ export const createFileTable = (
     implements FileTable
   {
     getFile = (url: string, spinner?: Ora) =>
-      this.accessSome([url], spinner).then(([{ name, checksum }]) =>
+      this.getsertMany([url], spinner).then(([{ name, checksum }]) =>
         new File(name).verified(checksum),
       );
   };
