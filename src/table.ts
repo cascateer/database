@@ -258,6 +258,12 @@ export class Table<R, K extends keyof R> {
     });
   }
 
+  public async accessOne(id: R[K], spinner?: Ora): Promise<R> {
+    return this.dispatch("insert", (currentIds: R[K][]) =>
+      this.records(difference([id], currentIds), spinner),
+    ).then((records) => this.selectById(records, id));
+  }
+
   public async accessSome<A extends R[K][]>(
     [...ids]: [...A],
     spinner?: Ora,
