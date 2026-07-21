@@ -268,26 +268,15 @@ export class Table<R, K extends keyof R> {
     ).then((records) => this.selectById(records, id));
   }
 
-  public async getsertMany<A extends R[K][]>(
-    [...ids]: [...A],
-    spinner?: Ora,
-  ): Promise<[...{ [K in keyof A]: R }]> {
-    if (ids.length !== uniq(ids).length) {
-      console.warn(`IDs ${ids.join(", ")} are not unique.`);
-    }
+  public async getsertMany(ids: R[K][], spinner?: Ora): Promise<R[]> {
+    ids = uniq(ids);
 
-    // @ts-expect-error
-    return this.dispatch(
-      "insert",
-      (currentIds: R[K][]) =>
-        // @ts-expect-error
-
-        this.records(difference(uniq(ids), currentIds), spinner),
-      // @ts-expect-error
+    return this.dispatch("insert", (currentIds: R[K][]) =>
+      this.records(difference(uniq(ids), currentIds), spinner),
     ).then((records) => ids.map((id) => this.selectById(records, id)));
   }
 
-  public async accessAll(): Promise<R[]> {
+  public async getAll(): Promise<R[]> {
     return new Promise<R[]>((resolve) => this.dispatch("all", resolve));
   }
 }
@@ -344,7 +333,7 @@ export const createFileTable = (
     implements FileTable
   {
     getFile = (url: string, spinner?: Ora) =>
-      this.getsertMany([url], spinner).then(([{ name, checksum }]) =>
+      this.getsertOne(url, spinner).then(({ name, checksum }) =>
         new File(name).verified(checksum),
       );
   };
