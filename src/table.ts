@@ -43,9 +43,18 @@ import {
 const { DATABASE_TABLE_BASE_URL = "tables" } = envConfig();
 
 export class TableIndex<R, K extends keyof R> {
-  private value = new Map<R[K], string>();
+  private entries: Map<R[K], string>;
 
-  constructor(public table: Table<R, K>) {}
+  constructor(
+    public table: Table<R, K>,
+    ...entries: [R[K], string][]
+  ) {
+    this.entries = new Map(entries);
+  }
+
+  clone() {
+    return new TableIndex(this.table, ...this.entries.entries());
+  }
 
   set(path: string, action: TableAction<R, K>): void {
     const ids =
@@ -58,7 +67,7 @@ export class TableIndex<R, K extends keyof R> {
             : [];
 
     for (const id of ids) {
-      this.value.set(id, path);
+      this.entries.set(id, path);
     }
   }
 
@@ -83,7 +92,7 @@ export class TableIndex<R, K extends keyof R> {
   }
 
   async get(id: R[K]): Promise<R | undefined> {
-    return this.readAction(this.value.get(id)).then((action) =>
+    return this.readAction(this.entries.get(id)).then((action) =>
       this.trySelectByIdFromAction(id, action),
     );
   }
@@ -93,7 +102,7 @@ export class TableIndex<R, K extends keyof R> {
     const records = new Array<R>();
 
     for (const id of ids) {
-      const record = await readActionMemoized(this.value.get(id)).then(
+      const record = await readActionMemoized(this.entries.get(id)).then(
         (action) => this.trySelectByIdFromAction(id, action),
       );
 
@@ -106,11 +115,11 @@ export class TableIndex<R, K extends keyof R> {
   }
 
   async getAll(): Promise<R[]> {
-    return this.getMany([...this.value.keys()]);
+    return this.getMany([...this.entries.keys()]);
   }
 
   getAllIds(): R[K][] {
-    return thru(this, ({ value }) => [
+    return thru(this, ({ entries: value }) => [
       ...{
         *[Symbol.iterator]() {
           for (const [id] of value) yield id;
@@ -442,7 +451,7 @@ export class Table<R, K extends keyof R> {
                   index.set(path, action);
                 }
 
-                callback?.call(null, index);
+                callback?.call(null, index.clone());
 
                 return result;
               }),
