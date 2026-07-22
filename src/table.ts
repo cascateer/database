@@ -1,4 +1,4 @@
-import { envConfig, nonNullable, nthArg } from "@cascateer/lib";
+import { envConfig, nonNullable, nthArg, property } from "@cascateer/lib";
 import { flatMap } from "@cascateer/lib/observable";
 import { LazyPromise } from "@cascateer/lib/promise";
 import { existsSync } from "fs";
@@ -8,10 +8,9 @@ import {
   difference,
   fromPairs,
   Function1,
-  intersectionBy,
+  intersectionWith,
   last,
   memoize,
-  noop,
   tap,
   thru,
   uniq,
@@ -21,8 +20,6 @@ import objectHash from "object-hash";
 import { Ora } from "ora";
 import { resolve } from "path";
 import {
-  concatMap,
-  identity,
   mergeAll,
   NextObserver,
   OperatorFunction,
@@ -45,6 +42,84 @@ import {
 
 const { DATABASE_TABLE_BASE_URL = "tables" } = envConfig();
 
+export class TableIndex<R, K extends keyof R> {
+  private value = new Map<R[K], string>();
+
+  constructor(public table: Table<R, K>) {}
+
+  set(path: string, action: TableAction<R, K>): void {
+    const ids =
+      action.type === "insert"
+        ? action.payload.records.map(this.table.selectId)
+        : action.type === "update"
+          ? [action.payload.record].map(this.table.selectId)
+          : action.type === "delete"
+            ? [action.payload.id]
+            : [];
+
+    for (const id of ids) {
+      this.value.set(id, path);
+    }
+  }
+
+  async readAction(path?: string): Promise<TableAction<R, K> | undefined> {
+    if (path != null) {
+      return readFile(path, "utf-8").then<TableAction<R, K>>(JSON.parse);
+    }
+  }
+
+  async trySelectByIdFromAction(
+    id: R[K],
+    action?: TableAction<R, K>,
+  ): Promise<R | undefined> {
+    return this.table.trySelectById(
+      action?.type === "insert"
+        ? action.payload.records
+        : action?.type === "update"
+          ? [action.payload.record]
+          : [],
+      id,
+    );
+  }
+
+  async get(id: R[K]): Promise<R | undefined> {
+    return this.readAction(this.value.get(id)).then((action) =>
+      this.trySelectByIdFromAction(id, action),
+    );
+  }
+
+  async getMany(ids: R[K][]): Promise<R[]> {
+    const readActionMemoized = memoize((path) => this.readAction(path));
+    const records = new Array<R>();
+
+    for (const id of ids) {
+      const record = await readActionMemoized(this.value.get(id)).then(
+        (action) => this.trySelectByIdFromAction(id, action),
+      );
+
+      if (record != null) {
+        records.push(record);
+      }
+    }
+
+    return records;
+  }
+
+  async getAll(): Promise<R[]> {
+    return this.getMany([...this.value.keys()]);
+  }
+
+  getAllIds(): R[K][] {
+    return thru(this, ({ value }) => [
+      ...{
+        *[Symbol.iterator]() {
+          for (const [id] of value) yield id;
+        },
+      },
+    ]);
+  }
+}
+
 export class Table<R, K extends keyof R> {
   private static readonly BASE_URL = DATABASE_TABLE_BASE_URL;
 
@@ -55,12 +130,16 @@ export class Table<R, K extends keyof R> {
     private observer: NextObserver<TableActionCreator<R, K>>,
   ) {}
 
+  createIndex(): TableIndex<R, K> {
+    return new TableIndex(this);
+  }
+
   get path() {
     return resolve(Table.BASE_URL, this.id);
   }
 
   protected readonly readActions = new LazyPromise<
-    R[],
+    TableIndex<R, K>,
     TableActionCreatorResult<R, K>
   >(async () => {
     if (!existsSync(this.path)) {
@@ -95,7 +174,7 @@ export class Table<R, K extends keyof R> {
     };
   });
 
-  applyActions = (records: R[], ...actions: TableAction<R, K>[]) =>
+  applyActions = (records: R[], ...actions: TableAction<R, K>[]): R[] =>
     actions.reduce((records, action) => {
       switch (action.type) {
         case "insert":
@@ -133,17 +212,17 @@ export class Table<R, K extends keyof R> {
 
   public async dispatch(
     ...args: TableActionDispatchArgsUnion<R, K>
-  ): Promise<R[]> {
-    return new Promise<R[]>((callback) => {
+  ): Promise<TableIndex<R, K>> {
+    return new Promise<TableIndex<R, K>>((callback) => {
       switch (args[0]) {
         case "one":
           this.observer.next(
             new LazyPromise(
-              (records): TableActionCreatorResult<R, K> =>
+              (tableIndex): Promise<TableActionCreatorResult<R, K>> =>
                 thru(
                   args,
-                  ([, id, predicate]) => (
-                    predicate(this.selectById(records, id)),
+                  async ([, id, predicate]) => (
+                    predicate(await tableIndex.get(id)),
                     {
                       actions: [],
                       callback,
@@ -157,11 +236,11 @@ export class Table<R, K extends keyof R> {
         case "all":
           this.observer.next(
             new LazyPromise(
-              (records): TableActionCreatorResult<R, K> =>
+              (tableIndex): Promise<TableActionCreatorResult<R, K>> =>
                 thru(
                   args,
-                  ([, predicate]) => (
-                    predicate(records),
+                  async ([, predicate]) => (
+                    predicate(await tableIndex.getAll()),
                     {
                       actions: [],
                       callback,
@@ -175,14 +254,15 @@ export class Table<R, K extends keyof R> {
         case "insert":
           this.observer.next(
             new LazyPromise(
-              async (records): Promise<TableActionCreatorResult<R, K>> => {
+              async (tableIndex): Promise<TableActionCreatorResult<R, K>> => {
                 const [, predicate] = args;
 
-                const newRecords = await predicate(records.map(this.selectId));
-                const conflictingIds = intersectionBy(
+                const currentIds = tableIndex.getAllIds();
+                const newRecords = await predicate(currentIds);
+                const conflictingIds = intersectionWith(
                   newRecords,
-                  records,
-                  this.selectId,
+                  currentIds,
+                  (record, id) => this.selectId(record) === id,
                 );
 
                 if (conflictingIds.length > 0) {
@@ -213,13 +293,13 @@ export class Table<R, K extends keyof R> {
           break;
         case "update":
           this.observer.next(
-            new LazyPromise((records) =>
+            new LazyPromise((tableIndex) =>
               thru(
                 args,
                 async ([, id, predicate]): Promise<
                   TableActionCreatorResult<R, K>
                 > => {
-                  const targetRecord = this.selectById(records, id);
+                  const targetRecord = nonNullable(await tableIndex.get(id));
                   const updatedTargetRecord = await predicate(targetRecord);
 
                   return {
@@ -246,13 +326,11 @@ export class Table<R, K extends keyof R> {
           break;
         case "delete":
           this.observer.next(
-            new LazyPromise((records) =>
+            new LazyPromise((tableIndex) =>
               thru(
                 args,
                 ([, id]): TableActionCreatorResult<R, K> => ({
-                  actions: records.some(
-                    (record) => this.selectId(record) === id,
-                  )
+                  actions: tableIndex.getAllIds().includes(id)
                     ? [
                         {
                           id: v4(),
@@ -279,7 +357,9 @@ export class Table<R, K extends keyof R> {
   public async getsertOne(id: R[K], spinner?: Ora): Promise<R> {
     return this.dispatch("insert", (currentIds: R[K][]) =>
       this.records(difference([id], currentIds), spinner),
-    ).then((records) => this.selectById(records, id));
+    )
+      .then((tableIndex) => tableIndex.get(id))
+      .then(nonNullable);
   }
 
   public async getsertMany(ids: R[K][], spinner?: Ora): Promise<R[]> {
@@ -287,7 +367,7 @@ export class Table<R, K extends keyof R> {
 
     return this.dispatch("insert", (currentIds: R[K][]) =>
       this.records(difference(uniq(ids), currentIds), spinner),
-    ).then((records) => ids.map((id) => this.selectById(records, id)));
+    ).then((tableIndex) => tableIndex.getMany(ids));
   }
 
   public async getAll(): Promise<R[]> {
@@ -295,13 +375,13 @@ export class Table<R, K extends keyof R> {
   }
 
   reduceActions =
-    <R, K extends keyof R>(
+    (
       transform: (records: R[], ...actions: TableAction<R, K>[]) => R[],
       seed: LazyPromise<
-        R[],
+        TableIndex<R, K>,
         {
           actions: TableAction<R, K>[];
-          callback?: Function1<R[], void>;
+          callback?: Function1<TableIndex<R, K>, void>;
         }
       >,
     ): OperatorFunction<TableActionCreator<R, K>, TableAction<R, K>> =>
@@ -310,16 +390,11 @@ export class Table<R, K extends keyof R> {
         startWith(seed),
         scan(
           (result, actions) =>
-            result.then(({ records, previousAction }) =>
-              actions.start(records).then(({ actions, callback }) => {
-                const transformedRecords = tap(
-                  transform(records, ...actions),
-                  callback ?? noop,
-                );
-
-                return thru(
+            result.then(({ index, previousAction }) =>
+              actions.start(index).then(async ({ actions, callback }) => {
+                const result = thru(
                   previousAction == null && actions.length > 0
-                    ? chunk(transformedRecords, 40).reduce(
+                    ? chunk(transform([], ...actions), 40).reduce(
                         (actions, records, id) =>
                           actions.concat({
                             id: `${id}`,
@@ -342,44 +417,47 @@ export class Table<R, K extends keyof R> {
                         };
                       }),
                   (actions) => ({
-                    records: transformedRecords,
+                    index,
                     actions,
                     previousAction: last(actions) ?? previousAction,
                   }),
                 );
+
+                for (const action of result.actions) {
+                  if (action.previousId == null) {
+                    const files = await readdir(this.path);
+
+                    for (const file of files) {
+                      await unlink(resolve(this.path, file));
+                    }
+                  }
+
+                  const path = resolve(
+                    this.path,
+                    `A${action.id.padStart(6, "0")}.json`,
+                  );
+
+                  await writeFile(path, JSON.stringify(action, null, "\t"));
+
+                  index.set(path, action);
+                }
+
+                callback?.call(null, index);
+
+                return result;
               }),
             ),
           Promise.resolve<{
-            records: Array<R>;
+            index: TableIndex<R, K>;
             actions: Array<TableAction<R, K>>;
             previousAction?: TableAction<R, K>;
           }>({
-            records: [],
+            index: this.createIndex(),
             actions: [],
           }),
         ),
         mergeAll(),
-        concatMap(async ({ actions }) => {
-          for (const action of actions) {
-            if (action.previousId == null) {
-              const files = await readdir(this.path);
-
-              for (const file of files) {
-                await unlink(resolve(this.path, file));
-              }
-            }
-
-            const path = resolve(
-              this.path,
-              `A${action.id.padStart(6, "0")}.json`,
-            );
-
-            await writeFile(path, JSON.stringify(action, null, "\t"));
-          }
-
-          return actions;
-        }),
-        flatMap(identity),
+        flatMap(property("actions")),
       );
 }
 

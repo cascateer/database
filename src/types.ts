@@ -3,7 +3,7 @@ import { LazyPromise } from "@cascateer/lib/promise";
 import { Function1 } from "lodash";
 import { Ora } from "ora";
 import { File } from "./file";
-import { Table } from "./table";
+import { Table, TableIndex } from "./table";
 
 interface BaseTableAction<Type> {
   id: string;
@@ -60,13 +60,13 @@ export type TableActionDispatchArgsUnion<
 }[Type];
 
 export interface TableActionCreator<R, K extends keyof R> extends LazyPromise<
-  R[],
+  TableIndex<R, K>,
   TableActionCreatorResult<R, K>
 > {}
 
 export interface TableActionCreatorResult<R, K extends keyof R> {
   actions: TableAction<R, K>[];
-  callback?: Function1<R[], void>;
+  callback?: Function1<TableIndex<R, K>, void>;
 }
 
 export interface TableRecordCreator<R, K extends keyof R> {
