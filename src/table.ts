@@ -56,7 +56,7 @@ export class TableIndex<R, K extends keyof R> {
     return new TableIndex(this.table, ...this.entries.entries());
   }
 
-  set(path: string, action: TableAction<R, K>): void {
+  set(action: TableAction<R, K>, path: string): void {
     if (action.type === "delete") {
       this.entries.delete(action.payload.id);
 
@@ -123,13 +123,7 @@ export class TableIndex<R, K extends keyof R> {
   }
 
   getAllIds(): R[K][] {
-    return thru(this, ({ entries: value }) => [
-      ...{
-        *[Symbol.iterator]() {
-          for (const [id] of value) yield id;
-        },
-      },
-    ]);
+    return [...this.entries.keys()];
   }
 }
 
@@ -452,7 +446,7 @@ export class Table<R, K extends keyof R> {
 
                   await writeFile(path, JSON.stringify(action, null, "\t"));
 
-                  index.set(path, action);
+                  index.set(action, path);
                 }
 
                 callback?.call(null, index.clone());
