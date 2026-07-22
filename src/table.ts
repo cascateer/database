@@ -57,14 +57,18 @@ export class TableIndex<R, K extends keyof R> {
   }
 
   set(path: string, action: TableAction<R, K>): void {
+    if (action.type === "delete") {
+      this.entries.delete(action.payload.id);
+
+      return;
+    }
+
     const ids =
       action.type === "insert"
         ? action.payload.records.map(this.table.selectId)
         : action.type === "update"
           ? [action.payload.record].map(this.table.selectId)
-          : action.type === "delete"
-            ? [action.payload.id]
-            : [];
+          : [];
 
     for (const id of ids) {
       this.entries.set(id, path);
