@@ -1,9 +1,9 @@
 {
-  "name": "@cascateer/database",
+  "name": "@cascateer/database_old",
   "version": "0.0.66",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cascateer/database.git"
+    "url": "git+https://github.com/cascateer/database_old.git"
   },
   "scripts": {
     "semver-patch": "npm version patch && git push origin main --tags",
